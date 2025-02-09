@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 
 CSV_FILENAME = "finance_data.csv"
 
-def add_source(ui):
+def add_source(ui,next_id):
     """Handles adding a source name and value to the UI & CSV."""
     account_name = ui.accountNameEdit.toPlainText().strip()
     source_name = ui.textEdit.toPlainText().strip()
@@ -25,16 +25,17 @@ def add_source(ui):
     # Add to the table UI
     row_count = ui.sourceTable.rowCount()
     ui.sourceTable.insertRow(row_count)
-    ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(account_name))
-    ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(source_name))
-    ui.sourceTable.setItem(row_count, 2, QTableWidgetItem(cleaned_value))
+    ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(str(next_id)))  # Id
+    ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(account_name))
+    ui.sourceTable.setItem(row_count, 2, QTableWidgetItem(source_name))
+    ui.sourceTable.setItem(row_count, 3, QTableWidgetItem(cleaned_value))
 
-    # Set Account Name and Source Name as **non-editable**
-    ui.sourceTable.item(row_count, 0).setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-    ui.sourceTable.item(row_count, 1).setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+    # Lock Id, Account Name, and Source Name
+    for col in range(3):
+        ui.sourceTable.item(row_count, col).setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
 
     # Save to CSV
-    save_to_csv(account_name, source_name, cleaned_value)
+    save_to_csv(next_id,account_name, source_name, cleaned_value)
 
     # Clear input fields
     ui.accountNameEdit.clear()
@@ -48,17 +49,13 @@ def clean_currency_input(value):
         return None
     return f"${float(value):,.2f}"
 
-def save_to_csv(account_name, source_name, source_value):
-    """Saves a single source entry to the CSV file."""
-    next_id = 1
-    if os.path.exists(CSV_FILENAME):
-        with open(CSV_FILENAME, "r", newline="") as file:
-            reader = csv.reader(file)
-            next_id = sum(1 for _ in reader)
-
+def save_to_csv(row_id,account_name, source_name, source_value):
+    """Saves a new entry to the CSV file."""
     date_created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    write_header = not os.path.exists(CSV_FILENAME)
+
     with open(CSV_FILENAME, "a", newline="") as file:
         writer = csv.writer(file)
-        if next_id == 1:
+        if write_header:
             writer.writerow(["Id", "AccountName", "SourceName", "SourceValue", "DateCreated"])
-        writer.writerow([next_id, account_name, source_name, source_value, date_created])
+        writer.writerow([row_id, account_name, source_name, source_value, date_created])
