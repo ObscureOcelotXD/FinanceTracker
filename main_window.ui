@@ -105,6 +105,19 @@
      </rect>
     </property>
    </widget>
+   <widget class="QPushButton" name="deleteRowButton">
+    <property name="geometry">
+     <rect>
+      <x>550</x>
+      <y>330</y>
+      <width>121</width>
+      <height>51</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Delete Selected Row</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
