@@ -76,9 +76,9 @@
    <widget class="QTableWidget" name="sourceTable">
     <property name="geometry">
      <rect>
-      <x>210</x>
-      <y>290</y>
-      <width>256</width>
+      <x>180</x>
+      <y>280</y>
+      <width>321</width>
       <height>192</height>
      </rect>
     </property>
@@ -86,11 +86,12 @@
      <number>0</number>
     </property>
     <property name="columnCount">
-     <number>2</number>
+     <number>3</number>
     </property>
     <attribute name="horizontalHeaderVisible">
      <bool>true</bool>
     </attribute>
+    <column/>
     <column/>
     <column/>
    </widget>

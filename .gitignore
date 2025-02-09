@@ -1,0 +1,21 @@
+# Ignore the virtual environment
+env/
+venv/
+.venv/
+
+# Ignore compiled Python files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore Qt WebEngine large files
+*.dll
+*.so
+*.dylib
+
+# Ignore build directories
+build/
+dist/
+
+finance_data.csv

@@ -1,7 +1,12 @@
-import re
 import sys
+import csv
+import re
+import os
+from datetime import datetime
 from PySide6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMessageBox
 from ui_main_window import Ui_FinanceTrackerHomeWindow
+
+CSV_FILENAME = "finance_data.csv"
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -10,19 +15,27 @@ class MainWindow(QMainWindow):
         self.ui.setupUi(self)
 
         # ✅ Set table headers
-        self.ui.sourceTable.setColumnCount(2)  # Ensure the table has 2 columns
-        self.ui.sourceTable.setHorizontalHeaderLabels(["Source Name", "Source Value"])  # Set headers
+        self.ui.sourceTable.setColumnCount(3)
+        self.ui.sourceTable.setHorizontalHeaderLabels(["Account Name","Source Name", "Source Value"])
 
-        # ✅ Ensure the method exists before connecting
+        # ✅ Connect "Add Source" button to a single method for UI & CSV
         self.ui.addSource.clicked.connect(self.add_source)
 
+         # ✅ Load existing data on startup
+        self.load_from_csv()
+
     def add_source(self):
-        """Handles adding a source to the table."""
+        """Handles adding a source name and value to the UI & CSV."""
         source_name = self.ui.textEdit.toPlainText().strip()
         source_value = self.ui.valueAmountEdit.toPlainText().strip()
+        account_name = self.ui.accountNameEdit.toPlainText().strip()  # ✅ Ensure account name is used
 
         if not source_name or not source_value:
             QMessageBox.warning(self, "Input Error", "Both Source Name and Value are required!")
+            return
+
+        if not account_name:
+            QMessageBox.warning(self, "Input Error", "Please enter an account name before adding sources.")
             return
 
         # ✅ Validate and clean the source value
@@ -31,33 +44,82 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Input Error", "Source Value must be a valid number format!")
             return
 
-        # Add a new row to the table
+        # ✅ Add to the table UI
         row_count = self.ui.sourceTable.rowCount()
         self.ui.sourceTable.insertRow(row_count)
-        self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(source_name))
-        self.ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(cleaned_value))
+        self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(account_name))
+        self.ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(source_name))
+        self.ui.sourceTable.setItem(row_count, 2, QTableWidgetItem(cleaned_value))
 
-        # Clear the input fields after adding
+        # ✅ Save to CSV immediately
+        self.save_to_csv(account_name, source_name, cleaned_value)
+
+        # ✅ Clear input fields
         self.ui.textEdit.clear()
         self.ui.valueAmountEdit.clear()
 
-
     def clean_currency_input(self, value):
-            """
-            Cleans and validates currency input.  
-            - Allows "$" and "," but removes them for conversion.
-            - Ensures proper numeric format (e.g., "50,000.00" or "$500" is allowed, but "5,00.00" is not).
-            """
-            # Remove dollar signs and commas
-            value = value.replace("$", "").replace(",", "")
+        """
+        Cleans and validates currency input.
+        - Allows "$" and "," but removes them for conversion.
+        - Ensures proper numeric format.
+        """
+        value = value.replace("$", "").replace(",", "")
 
-            # Ensure valid numeric format
-            if not re.match(r"^\d+(\.\d{1,2})?$", value):  # Allows whole numbers or 2 decimal places
-                return None
+        if not re.match(r"^\d+(\.\d{1,2})?$", value):
+            return None
 
-            # Convert to float and format as currency
-            currency_value = float(value)
-            return f"${currency_value:,.2f}"  # Format as "$xx,xxx.xx"
+        currency_value = float(value)
+        return f"${currency_value:,.2f}"
+
+    def save_to_csv(self, account_name, source_name, source_value):
+        """Saves a single source entry to the CSV file."""
+        next_id = 1
+        if os.path.exists(CSV_FILENAME):
+            with open(CSV_FILENAME, "r", newline="") as file:
+                reader = csv.reader(file)
+                next_id = sum(1 for _ in reader)  # Auto-increment ID based on existing rows
+
+        date_created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        with open(CSV_FILENAME, "a", newline="") as file:
+            writer = csv.writer(file)
+            if next_id == 1:  # Write header if file is new
+                writer.writerow(["Id", "AccountName", "SourceName", "SourceValue", "DateCreated"])
+            writer.writerow([next_id, account_name, source_name, source_value, date_created])
+
+        QMessageBox.information(self, "Success", "Source added and saved to CSV!")
+
+
+    def load_from_csv(self):
+            """Loads existing CSV data into the table on startup."""
+            if not os.path.exists(CSV_FILENAME):
+                return  # No file yet, so nothing to load
+
+            with open(CSV_FILENAME, "r", newline="") as file:
+                reader = csv.reader(file)
+                headers = next(reader, None)  # Read header row
+
+                if headers != ["Id", "AccountName", "SourceName", "SourceValue", "DateCreated"]:
+                    QMessageBox.warning(self, "Warning", "CSV file format may be incorrect.")
+                    return
+
+                for row in reader:
+                    if len(row) < 5:
+                        continue  # Skip malformed rows
+                    
+                    account_name = row[1]
+                    source_name = row[2]  # Column index for SourceName
+                    source_value = row[3]  # Column index for SourceValue
+
+                    row_count = self.ui.sourceTable.rowCount()
+                    self.ui.sourceTable.insertRow(row_count)
+
+                    self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(account_name))
+                    self.ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(source_name))
+                    self.ui.sourceTable.setItem(row_count, 2, QTableWidgetItem(source_value))
+
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

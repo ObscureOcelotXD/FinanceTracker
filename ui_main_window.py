@@ -42,12 +42,12 @@ class Ui_FinanceTrackerHomeWindow(object):
         self.sourceLabel.setObjectName(u"sourceLabel")
         self.sourceLabel.setGeometry(QRect(270, 130, 131, 31))
         self.sourceTable = QTableWidget(self.centralwidget)
-        if (self.sourceTable.columnCount() < 2):
-            self.sourceTable.setColumnCount(2)
+        if (self.sourceTable.columnCount() < 3):
+            self.sourceTable.setColumnCount(3)
         self.sourceTable.setObjectName(u"sourceTable")
-        self.sourceTable.setGeometry(QRect(210, 290, 256, 192))
+        self.sourceTable.setGeometry(QRect(180, 280, 321, 192))
         self.sourceTable.setRowCount(0)
-        self.sourceTable.setColumnCount(2)
+        self.sourceTable.setColumnCount(3)
         self.sourceTable.horizontalHeader().setVisible(True)
         self.valueAmountEdit = QTextEdit(self.centralwidget)
         self.valueAmountEdit.setObjectName(u"valueAmountEdit")
