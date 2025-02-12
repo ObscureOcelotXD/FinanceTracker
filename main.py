@@ -9,6 +9,7 @@ from ui_main_window import Ui_FinanceTrackerHomeWindow
 from handlers.add_handler import add_source
 from handlers.edit_handler import handle_value_edit
 from handlers.delete_handler import delete_selected_row
+import csv_utils
 
 CSV_FILENAME = "finance_data.csv"
 
@@ -38,98 +39,39 @@ class MainWindow(QMainWindow):
          # ✅ Load existing data on startup
         self.load_from_csv()
 
-    def save_to_csv(self, account_name, source_name, source_value):
-        self.load_from_csv()
-        """Saves a single source entry to the CSV file."""
-        next_id = 1  # Default to 1
-        if os.path.exists(CSV_FILENAME):
-            with open(CSV_FILENAME, "r", newline="") as file:
-                reader = csv.reader(file)
-                next(reader, None)  # Skip header row
-                ids = [int(row[0]) for row in reader if row[0].isdigit()]
-                next_id = max(ids, default=0) + 1  # Get the highest Id and increment
 
-
-
-        date_created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # ✅ Append new data
-        with open(CSV_FILENAME, "a", newline="") as file:
-            writer = csv.writer(file)
-            if os.stat(CSV_FILENAME).st_size == 0:  # If empty, write header
-                writer.writerow(["Id", "AccountName", "SourceName", "SourceValue", "DateCreated"])
-            writer.writerow([next_id, account_name, source_name, source_value.strip('"'), date_created])
-
-        # ✅ Reload & sort CSV data
-        self.load_from_csv()
-        QMessageBox.information(self, "Success", "Source added and saved to CSV!")
 
 
     def load_from_csv(self):
-        """Loads existing CSV data into the table on startup."""
-        if not os.path.exists(CSV_FILENAME):
-            return  # No file yet, so nothing to load
+        """Loads CSV data into the table on startup."""
+        rows = csv_utils.load_csv_data()
+        if not rows:
+            QMessageBox.warning(self, "Warning", "CSV file may be missing or has an unexpected format.")
+            return
 
-        with open(CSV_FILENAME, "r", newline="") as file:
-            reader = csv.reader(file)
-            headers = next(reader, None)  # Read header row
+        # Sort rows numerically by the float value
+        rows.sort(key=lambda x: x[0])
+        self.ui.sourceTable.setRowCount(0)
 
-            if headers != ["Id", "AccountName", "SourceName", "SourceValue", "DateCreated"]:
-                QMessageBox.warning(self, "Warning", "CSV file format may be incorrect.")
-                return
+        for numeric_value, row_id, account_name, source_name, source_value in rows:
+            row_count = self.ui.sourceTable.rowCount()
+            self.ui.sourceTable.insertRow(row_count)
+            self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(row_id))
+            self.ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(account_name))
+            self.ui.sourceTable.setItem(row_count, 2, QTableWidgetItem(source_name))
+            self.ui.sourceTable.setItem(row_count, 3, QTableWidgetItem(source_value))
+            self.ui.sourceTable.setItem(row_count, 4, QTableWidgetItem(str(numeric_value)))
+            for col in range(3):
+                self.ui.sourceTable.item(row_count, col).setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
 
-            rows = [] 
-            for row in reader:
-                if len(row) < 5:
-                    continue  # Skip malformed rows
+        self.ui.sourceTable.viewport().update()
+        self.ui.sourceTable.repaint()
 
-                row_id, account_name, source_name, source_value = row[0], row[1], row[2], row[3]
-
-                # ✅ Debug: Print how values are being read
-                print(f"🔹 Read from CSV: {row}")
-
-                # ✅ Remove quotes if present
-                source_value = source_value.strip('"')
-
-                # ✅ Convert SourceValue to float for sorting
-                try:
-                    numeric_value = float(source_value.replace("$", "").replace(",", ""))
-                except ValueError:
-                    numeric_value = 0  # Handle invalid cases
-
-                rows.append((numeric_value, row_id, account_name, source_name, source_value))
-
-
-            # Sort rows numerically by the float value
-            rows.sort(key=lambda x: x[0])
-
-            # ✅ Debug: Print sorted list before inserting into UI
-            print(f"✅ Sorted Rows: {rows}")
-
-            # ✅ Clear table before inserting data
-            self.ui.sourceTable.setRowCount(0)
-
-            # ✅ Insert data into UI Table
-            for numeric_value, row_id, account_name, source_name, source_value in rows:
-                print(f"✅ Inserting into UI: {row_id}, {account_name}, {source_name}, {source_value}")  # Debug output
-
-                row_count = self.ui.sourceTable.rowCount()
-                self.ui.sourceTable.insertRow(row_count)
-                self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(row_id))
-                self.ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(account_name))
-                self.ui.sourceTable.setItem(row_count, 2, QTableWidgetItem(source_name))
-                self.ui.sourceTable.setItem(row_count, 3, QTableWidgetItem(source_value))
-                num = float(source_value.replace("$", "").replace(",", ""))
-                self.ui.sourceTable.setItem(row_count, 4, QTableWidgetItem(num))
-                # ✅ Lock Id, Account Name, and Source Name
-                for col in range(3):
-                    self.ui.sourceTable.item(row_count, col).setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-
-        # ✅ Debug: Print final table row count
-        print(f"✅ Final Table Row Count: {self.ui.sourceTable.rowCount()}")
-
-        self.ui.sourceTable.viewport().update()  # ✅ Force UI update after loading
-        self.ui.sourceTable.repaint()  # ✅ Ensures table reflects the sorted data
+    def save_to_csv(self, account_name, source_name, source_value):
+        """Saves a new entry and reloads the table."""
+        csv_utils.save_entry(account_name, source_name, source_value)
+        self.load_from_csv()
+        QMessageBox.information(self, "Success", "Source added and saved to CSV!")
 
 
 
@@ -151,80 +93,31 @@ class MainWindow(QMainWindow):
 
 
     def sort_by_value(self):
-        """Sorts the table numerically using the hidden float column (column 4)."""
-        self.ui.sourceTable.setSortingEnabled(False)  # Temporarily disable sorting
+        """Sorts CSV data and updates the table based on the numeric value."""
+        self.ui.sourceTable.setSortingEnabled(False)
 
-        # ✅ Determine sort order
-        order = Qt.AscendingOrder if self.sort_ascending else Qt.DescendingOrder
+        rows = csv_utils.get_sorted_csv_data(self.sort_ascending)
+        if not rows:
+            QMessageBox.warning(self, "Warning", "CSV file may be missing or has an unexpected format.")
+            return
 
-        if not os.path.exists(CSV_FILENAME):
-            return  # No file yet, so nothing to load
+        self.ui.sourceTable.setRowCount(0)  # Clear the table
 
-        with open(CSV_FILENAME, "r", newline="") as file:
-            reader = csv.reader(file)
-            headers = next(reader, None)  # Read header row
-
-            if headers != ["Id", "AccountName", "SourceName", "SourceValue", "DateCreated"]:
-                QMessageBox.warning(self, "Warning", "CSV file format may be incorrect.")
-                return
-
-            rows = [] 
-            for row in reader:
-                if len(row) < 5:
-                    continue  # Skip malformed rows
-
-                row_id, account_name, source_name, source_value = row[0], row[1], row[2], row[3]
-
-                # ✅ Debug: Print how values are being read
-                print(f"🔹 Read from CSV: {row}")
-
-                # ✅ Remove quotes if present
-                source_value = source_value.strip('"')
-
-                # ✅ Convert SourceValue to float for sorting
-                try:
-                    numeric_value = float(source_value.replace("$", "").replace(",", ""))
-                except ValueError:
-                    numeric_value = 0  # Handle invalid cases
-
-                rows.append((numeric_value, row_id, account_name, source_name, source_value))
-
-
-        # ✅ Apply sorting order explicitly using an `if` statement
-        if order == Qt.AscendingOrder:
-            rows.sort(key=lambda x: x[0])  # ✅ Ascending order
-        else:
-            rows.sort(key=lambda x: x[0], reverse=True)  # ✅ Descending order
-            
-        print(f"✅ Sorted Rows on Sort: {rows}")
-
-        # Reinsert sorted data into the table
-        self.ui.sourceTable.setRowCount(0)  # Clear existing rows
         for numeric_value, row_id, account_name, source_name, source_value in rows:
             row_count = self.ui.sourceTable.rowCount()
-            
             self.ui.sourceTable.insertRow(row_count)
             self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(row_id))
             self.ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(account_name))
             self.ui.sourceTable.setItem(row_count, 2, QTableWidgetItem(source_name))
             self.ui.sourceTable.setItem(row_count, 3, QTableWidgetItem(source_value))
-            # # Store formatted currency in visible column
-            # currency_item = QTableWidgetItem(f"${numeric_value:,.2f}")
-            # self.ui.sourceTable.setItem(row_count, 3, currency_item)
-
-            # Store float value in hidden column for sorting
+            
+            # Update the hidden column with the numeric value
             float_item = QTableWidgetItem(str(numeric_value))
-            float_item.setData(Qt.UserRole, numeric_value)  # Ensure numeric sorting
+            float_item.setData(Qt.UserRole, numeric_value)
             self.ui.sourceTable.setItem(row_count, 4, float_item)
 
-
-
-        # self.ui.sourceTable.setSortingEnabled(True)  # Re-enable sorting
-        # self.ui.sourceTable.sortItems(5, order)  # Sort using the hidden column
-        # ✅ Toggle sort direction for next click
-
-        self.ui.sourceTable.viewport().update()  # ✅ Force UI update after loading
-        self.ui.sourceTable.repaint()  # ✅ Ensures table reflects the sorted data
+        self.ui.sourceTable.viewport().update()
+        self.ui.sourceTable.repaint()
         self.sort_ascending = not self.sort_ascending
 
 if __name__ == "__main__":
