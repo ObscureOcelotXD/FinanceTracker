@@ -1,5 +1,8 @@
 import csv
 import os
+import re
+import time
+import threading
 from PySide6.QtWidgets import QMessageBox
 
 CSV_FILENAME = "finance_data.csv"
@@ -9,61 +12,111 @@ def handle_value_edit(main_window, item):
     row = item.row()
     column = item.column()
 
-    if column != 2:  # Only allow editing of 'Source Value' column
+    # ✅ Ensure we are editing the correct column (Source Value)
+    if column != 3:
         return
 
-    # Get updated value
+    # ✅ Get updated value and print debug info
     new_value = item.text().strip()
-    cleaned_value = clean_currency_input(new_value)
-    if cleaned_value is None:
-        QMessageBox.warning(main_window.ui, "Input Error", "Invalid currency format.")
+    print(f"🔹 Editing Row {row}, Column {column}, New Value: '{new_value}'")
+
+    # ✅ Ignore empty edits (prevents false alerts)
+    if not new_value:
         return
 
-    # Update the table with formatted value
-    main_window.ui.sourceTable.blockSignals(True)  # Block signals before update
+    # ✅ Validate and clean currency input
+    cleaned_value = clean_currency_input(new_value)
+
+    # ✅ If invalid, prevent multiple alerts
+    if cleaned_value is None:
+        print(f"⚠️ Invalid Input Detected: {new_value}")  # Debugging
+        if not hasattr(main_window, "_alert_shown") or not main_window._alert_shown:
+            QMessageBox.warning(main_window, "Input Error", "Invalid currency format.")
+            main_window._alert_shown = True  # Prevent further alerts
+        return
+
+    # ✅ Update table with formatted value
+    main_window.ui.sourceTable.blockSignals(True)  # ✅ Block signals before update
     main_window.ui.sourceTable.item(row, column).setText(cleaned_value)
-    main_window.ui.sourceTable.blockSignals(False)  # Re-enable signals after update
+    main_window.ui.sourceTable.blockSignals(False)  # ✅ Re-enable signals
 
-
-    # Retrieve other row details to identify the correct entry
+    # ✅ Retrieve row Id
     id_item = main_window.ui.sourceTable.item(row, 0)
     row_id = id_item.text() if id_item else None
 
     if row_id is None:
-        QMessageBox.warning(main_window.ui, "Error", "Cannot determine row Id.")
+        QMessageBox.warning(main_window, "Error", "Cannot determine row Id.")
         return
 
+    # ✅ Update CSV file
+    #update_csv(row_id, cleaned_value)
+        # ✅ Debounce updates to avoid multiple writes
+    #threading.Thread(target=update_csv, args=(row_id, cleaned_value), daemon=True).start()
 
-    # Update CSV file
-    update_csv(row_id, cleaned_value)
 
 def clean_currency_input(value):
     """Cleans and validates currency input."""
-    value = value.replace("$", "").replace(",", "")
-    if not value.replace(".", "", 1).isdigit():
+    if not value or value.strip() == "":
+        return None  # ✅ Prevents empty values from triggering the error
+
+    value = value.replace("$", "").replace(",", "").strip()
+
+    # ✅ Ensure the value is a valid number (allows integers & decimals)
+    if not re.match(r"^\d+(\.\d{1,2})?$", value):
+        print(f"⚠️ Invalid Input Detected: {value}")  # ✅ Debugging line
         return None
+
     return f"${float(value):,.2f}"
 
+
+
+
+
 def update_csv(row_id, new_value):
-    """Updates the CSV file with an edited Source Value."""
-    if not os.path.exists(CSV_FILENAME):
-        return
-
+    """Updates the CSV file with the edited Source Value."""
     temp_filename = CSV_FILENAME + ".tmp"
-    with open(CSV_FILENAME, "r", newline="") as infile, open(temp_filename, "w", newline="") as outfile:
+
+    print(f"🔹 Attempting to update row {row_id} with value {new_value}")
+
+    # ✅ Read entire CSV into memory before writing
+    with open(CSV_FILENAME, "r", newline="") as infile:
         reader = csv.reader(infile)
+        rows = list(reader)  # ✅ Read everything first
+        print(f"✅ Read {len(rows)} rows from {CSV_FILENAME}")
+
+    # ✅ Write to temp file
+    with open(temp_filename, "w", newline="") as outfile:
         writer = csv.writer(outfile)
-
-        headers = next(reader, None)
-        writer.writerow(headers)
-
-        for row in reader:
+        for row in rows:
             if len(row) < 5:
                 continue
 
             if row[0] == row_id:
-                row[3] = new_value  # Update SourceValue (column 3)
+                row[3] = new_value  # ✅ Update SourceValue
 
             writer.writerow(row)
 
-    os.replace(temp_filename, CSV_FILENAME)
+    print(f"✅ Temporary CSV file written: {temp_filename}")
+
+    # ✅ Ensure the temp file exists before replacing the original
+    if not os.path.exists(temp_filename):
+        print(f"❌ Error: Temporary file {temp_filename} not found. Cannot update CSV.")
+        return
+
+    # ✅ Retry renaming file if Windows still locks it
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            os.remove(CSV_FILENAME)  # ✅ Explicitly remove old CSV first
+            time.sleep(0.1)  # ✅ Short delay
+            os.rename(temp_filename, CSV_FILENAME)  # ✅ Now rename safely
+            print("✅ CSV successfully updated.")
+            break  # ✅ Exit loop if successful
+        except PermissionError:
+            print(f"⚠️ Attempt {attempt+1}: PermissionError - Retrying in 0.5s...")
+            time.sleep(0.5)  # ✅ Wait before retrying
+    else:
+        print(f"❌ Failed to replace {CSV_FILENAME} after {max_retries} attempts.")
+
+
+
