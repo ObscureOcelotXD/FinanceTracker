@@ -55,6 +55,9 @@ class Ui_FinanceTrackerHomeWindow(object):
         self.deleteRowButton = QPushButton(self.centralwidget)
         self.deleteRowButton.setObjectName(u"deleteRowButton")
         self.deleteRowButton.setGeometry(QRect(550, 330, 121, 51))
+        self.resetButton = QPushButton(self.centralwidget)
+        self.resetButton.setObjectName(u"resetButton")
+        self.resetButton.setGeometry(QRect(520, 230, 101, 41))
         FinanceTrackerHomeWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(FinanceTrackerHomeWindow)
         self.menubar.setObjectName(u"menubar")
@@ -75,5 +78,6 @@ class Ui_FinanceTrackerHomeWindow(object):
         self.addSource.setText(QCoreApplication.translate("FinanceTrackerHomeWindow", u"Add Source", None))
         self.sourceLabel.setText(QCoreApplication.translate("FinanceTrackerHomeWindow", u"Enter Sources", None))
         self.deleteRowButton.setText(QCoreApplication.translate("FinanceTrackerHomeWindow", u"Delete Selected Row", None))
+        self.resetButton.setText(QCoreApplication.translate("FinanceTrackerHomeWindow", u"Reset", None))
     # retranslateUi
 

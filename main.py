@@ -38,6 +38,7 @@ class MainWindow(QMainWindow):
         self.ui.sourceTable.itemChanged.connect(lambda item: handle_value_edit(self, item))
         self.ui.deleteRowButton.clicked.connect(lambda: delete_selected_row(self.ui))
 
+        self.ui.resetButton.clicked.connect(self.reset_to_initial_state)
          # ✅ Load existing data on startup
         self.populate_table_with_group_totals()
 
@@ -231,12 +232,13 @@ class MainWindow(QMainWindow):
         total_display = QTableWidgetItem("${:,.2f}".format(total_value))
         total_display.setFlags(Qt.ItemIsEnabled)
         self.ui.sourceTable.setItem(totals_row, 3, total_display)
-
+        
+        darkBlue = QBrush(QColor(0, 0, 204))
         # Style the totals row
         for col in range(self.ui.sourceTable.columnCount()):
             item = self.ui.sourceTable.item(totals_row, col)
             if item is not None:
-                item.setBackground(Qt.lightGray)
+                item.setBackground(darkBlue)
 
         self.ui.sourceTable.viewport().update()
         self.ui.sourceTable.repaint()
@@ -262,7 +264,14 @@ class MainWindow(QMainWindow):
         """Handles calling add_source with the correct Id"""
         add_source(self.ui, self.get_next_id())
 
-
+    def reset_to_initial_state(self):
+        """Resets the table to its initial state by reloading from CSV and populating group totals."""
+        
+        # Reload data from CSV file.
+        self.load_from_csv()
+        
+        # Populate table with group totals again.
+        self.populate_table_with_group_totals()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
