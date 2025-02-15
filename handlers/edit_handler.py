@@ -12,47 +12,44 @@ def handle_value_edit(main_window, item):
     row = item.row()
     column = item.column()
 
-    # ✅ Ensure we are editing the correct column (Source Value)
+    # Ensure we are editing the correct column (Source Value)
     if column != 3:
         return
 
-    # ✅ Get updated value and print debug info
+    # Get updated value and print debug info
     new_value = item.text().strip()
     print(f"🔹 Editing Row {row}, Column {column}, New Value: '{new_value}'")
 
-    # ✅ Ignore empty edits (prevents false alerts)
+    # Ignore empty edits
     if not new_value:
         return
 
-    # ✅ Validate and clean currency input
+    # Validate and clean currency input
     cleaned_value = clean_currency_input(new_value)
 
-    # ✅ If invalid, prevent multiple alerts
+    # If invalid, prevent multiple alerts
     if cleaned_value is None:
-        print(f"⚠️ Invalid Input Detected: {new_value}")  # Debugging
+        print(f"Invalid Input Detected: {new_value}")
         if not hasattr(main_window, "_alert_shown") or not main_window._alert_shown:
             QMessageBox.warning(main_window, "Input Error", "Invalid currency format.")
-            main_window._alert_shown = True  # Prevent further alerts
+            main_window._alert_shown = True
         return
 
-    # ✅ Update table with formatted value
-    main_window.ui.sourceTable.blockSignals(True)  # ✅ Block signals before update
+    # Update table with formatted value
+    main_window.ui.sourceTable.blockSignals(True)
     main_window.ui.sourceTable.item(row, column).setText(cleaned_value)
-    main_window.ui.sourceTable.blockSignals(False)  # ✅ Re-enable signals
+    main_window.ui.sourceTable.blockSignals(False)
 
-    # ✅ Retrieve row Id
+    # Retrieve row Id from the first column
     id_item = main_window.ui.sourceTable.item(row, 0)
     row_id = id_item.text() if id_item else None
 
-    if row_id is None:
-        QMessageBox.warning(main_window, "Error", "Cannot determine row Id.")
+    # Check if this is the totals row (or an invalid row) and skip processing
+    if row_id is None or not row_id.isdigit():
+        # If the row doesn't have a valid numeric id, assume it's the totals row
+        print(f"Skipping edit on totals or non-data row at row {row}")
         return
-
-    # ✅ Update CSV file
-    #update_csv(row_id, cleaned_value)
-        # ✅ Debounce updates to avoid multiple writes
-    #threading.Thread(target=update_csv, args=(row_id, cleaned_value), daemon=True).start()
-
+    
 
 def clean_currency_input(value):
     """Cleans and validates currency input."""
@@ -63,13 +60,10 @@ def clean_currency_input(value):
 
     # ✅ Ensure the value is a valid number (allows integers & decimals)
     if not re.match(r"^\d+(\.\d{1,2})?$", value):
-        print(f"⚠️ Invalid Input Detected: {value}")  # ✅ Debugging line
+        print(f" Invalid Input Detected: {value}")  # ✅ Debugging line
         return None
 
     return f"${float(value):,.2f}"
-
-
-
 
 
 def update_csv(row_id, new_value):
@@ -100,7 +94,7 @@ def update_csv(row_id, new_value):
 
     # ✅ Ensure the temp file exists before replacing the original
     if not os.path.exists(temp_filename):
-        print(f"❌ Error: Temporary file {temp_filename} not found. Cannot update CSV.")
+        print(f" Error: Temporary file {temp_filename} not found. Cannot update CSV.")
         return
 
     # ✅ Retry renaming file if Windows still locks it
@@ -116,7 +110,7 @@ def update_csv(row_id, new_value):
             print(f"⚠️ Attempt {attempt+1}: PermissionError - Retrying in 0.5s...")
             time.sleep(0.5)  # ✅ Wait before retrying
     else:
-        print(f"❌ Failed to replace {CSV_FILENAME} after {max_retries} attempts.")
+        print(f" Failed to replace {CSV_FILENAME} after {max_retries} attempts.")
 
 
 

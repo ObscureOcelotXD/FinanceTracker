@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
-    <height>600</height>
+    <width>1274</width>
+    <height>900</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -76,10 +76,10 @@
    <widget class="QTableWidget" name="sourceTable">
     <property name="geometry">
      <rect>
-      <x>120</x>
+      <x>60</x>
       <y>280</y>
-      <width>411</width>
-      <height>192</height>
+      <width>471</width>
+      <height>431</height>
      </rect>
     </property>
     <property name="rowCount">
@@ -125,7 +125,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>800</width>
+     <width>1274</width>
      <height>33</height>
     </rect>
    </property>

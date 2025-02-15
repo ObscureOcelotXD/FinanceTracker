@@ -23,7 +23,7 @@ class Ui_FinanceTrackerHomeWindow(object):
     def setupUi(self, FinanceTrackerHomeWindow):
         if not FinanceTrackerHomeWindow.objectName():
             FinanceTrackerHomeWindow.setObjectName(u"FinanceTrackerHomeWindow")
-        FinanceTrackerHomeWindow.resize(800, 600)
+        FinanceTrackerHomeWindow.resize(1274, 900)
         self.centralwidget = QWidget(FinanceTrackerHomeWindow)
         self.centralwidget.setObjectName(u"centralwidget")
         self.accountNameEdit = QTextEdit(self.centralwidget)
@@ -45,7 +45,7 @@ class Ui_FinanceTrackerHomeWindow(object):
         if (self.sourceTable.columnCount() < 4):
             self.sourceTable.setColumnCount(4)
         self.sourceTable.setObjectName(u"sourceTable")
-        self.sourceTable.setGeometry(QRect(120, 280, 411, 192))
+        self.sourceTable.setGeometry(QRect(60, 280, 471, 431))
         self.sourceTable.setRowCount(0)
         self.sourceTable.setColumnCount(4)
         self.sourceTable.horizontalHeader().setVisible(True)
@@ -58,7 +58,7 @@ class Ui_FinanceTrackerHomeWindow(object):
         FinanceTrackerHomeWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(FinanceTrackerHomeWindow)
         self.menubar.setObjectName(u"menubar")
-        self.menubar.setGeometry(QRect(0, 0, 800, 33))
+        self.menubar.setGeometry(QRect(0, 0, 1274, 33))
         FinanceTrackerHomeWindow.setMenuBar(self.menubar)
         self.statusbar = QStatusBar(FinanceTrackerHomeWindow)
         self.statusbar.setObjectName(u"statusbar")
