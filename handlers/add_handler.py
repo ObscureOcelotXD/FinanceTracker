@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from PySide6.QtWidgets import QTableWidgetItem, QMessageBox
 from PySide6.QtCore import Qt
+from db_manager import insert_record   
 
 CSV_FILENAME = "finance_data.csv"
 
@@ -35,7 +36,7 @@ def add_source(ui,next_id):
         ui.sourceTable.item(row_count, col).setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
 
     # Save to CSV
-    save_to_csv(next_id,account_name, source_name, cleaned_value)
+    save_to_db(next_id,account_name, source_name, cleaned_value)
 
     # Clear input fields
     ui.accountNameEdit.clear()
@@ -49,13 +50,5 @@ def clean_currency_input(value):
         return None
     return f"${float(value):,.2f}"
 
-def save_to_csv(row_id,account_name, source_name, source_value):
-    """Saves a new entry to the CSV file."""
-    date_created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    write_header = not os.path.exists(CSV_FILENAME)
-
-    with open(CSV_FILENAME, "a", newline="") as file:
-        writer = csv.writer(file)
-        if write_header:
-            writer.writerow(["Id", "AccountName", "SourceName", "SourceValue", "DateCreated"])
-        writer.writerow([row_id, account_name, source_name, source_value, date_created])
+def save_to_db(row_id, account_name, source_name, source_value):
+    insert_record(account_name, source_name, source_value.strip("$").replace(",", ""))

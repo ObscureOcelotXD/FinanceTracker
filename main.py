@@ -12,6 +12,7 @@ from handlers.add_handler import add_source
 from handlers.edit_handler import handle_value_edit
 from handlers.delete_handler import delete_selected_row
 import csv_utils
+import db_manager
 
 CSV_FILENAME = "finance_data.csv"
 
@@ -39,6 +40,7 @@ class MainWindow(QMainWindow):
         self.ui.deleteRowButton.clicked.connect(lambda: delete_selected_row(self.ui))
 
         self.ui.resetButton.clicked.connect(self.reset_to_initial_state)
+        db_manager.init_db()
          # ✅ Load existing data on startup
         self.populate_table_with_group_totals()
 
@@ -50,15 +52,18 @@ class MainWindow(QMainWindow):
         then adds a totals row for each account with a green background.
         """
         # Load all CSV rows using your CSV module
-        rows = csv_utils.load_csv_data()  # rows is a list of tuples:
+        #rows = csv_utils.load_csv_data()  # rows is a list of tuples:
         # Each tuple: (numeric_value, row_id, account_name, source_name, source_value)
-        if not rows:
-            QMessageBox.warning(self, "Warning", "CSV file may be missing or has an unexpected format.")
+
+        records = db_manager.get_all_records()
+
+        if records is None:
+            QMessageBox.warning(self, "Warning", "db file may be missing or has an unexpected format.")
             return
 
         # Group rows by account name
         groups = defaultdict(list)
-        for row in rows:
+        for row in records:
             numeric_value, row_id, account_name, source_name, source_value = row
             groups[account_name].append(row)
 
@@ -135,19 +140,20 @@ class MainWindow(QMainWindow):
 
     def load_from_csv(self):
         """Loads CSV data into the table and appends a totals row at the bottom."""
-        rows = csv_utils.load_csv_data()  # Only data rows from CSV
-        if not rows:
+        #rows = csv_utils.load_csv_data()  # Only data rows from CSV
+        records = db_manager.get_all_records()
+        if records is None:
             QMessageBox.warning(self, "Warning", "CSV file may be missing or has an unexpected format.")
             return
 
         # Sort rows by numeric value (ascending by default)
-        rows.sort(key=lambda x: x[0])
+        records.sort(key=lambda x: x[0])
         self.ui.sourceTable.setSortingEnabled(False)  # Disable built-in sorting
         self.ui.sourceTable.setRowCount(0)  # Clear table
 
         total_value = 0
         # Insert each data row
-        for numeric_value, row_id, account_name, source_name, source_value in rows:
+        for numeric_value, row_id, account_name, source_name, source_value in records:
             row_count = self.ui.sourceTable.rowCount()
             self.ui.sourceTable.insertRow(row_count)
             self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(row_id))
@@ -195,8 +201,8 @@ class MainWindow(QMainWindow):
         self.ui.sourceTable.setSortingEnabled(False)  # Disable built-in sorting
         
         # Get sorted rows from your CSV module. Toggle sort order based on a flag.
-        rows = csv_utils.get_sorted_csv_data(self.sort_ascending)
-        if not rows:
+        records = db_manager.get_all_records()
+        if records is None:
             QMessageBox.warning(self, "Warning", "CSV file may be missing or has an unexpected format.")
             return
 
@@ -204,7 +210,7 @@ class MainWindow(QMainWindow):
 
         total_value = 0
         # Insert sorted data rows
-        for numeric_value, row_id, account_name, source_name, source_value in rows:
+        for numeric_value, row_id, account_name, source_name, source_value in records:
             row_count = self.ui.sourceTable.rowCount()
             self.ui.sourceTable.insertRow(row_count)
             self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(row_id))
@@ -232,7 +238,7 @@ class MainWindow(QMainWindow):
         total_display = QTableWidgetItem("${:,.2f}".format(total_value))
         total_display.setFlags(Qt.ItemIsEnabled)
         self.ui.sourceTable.setItem(totals_row, 3, total_display)
-        
+
         darkBlue = QBrush(QColor(0, 0, 204))
         # Style the totals row
         for col in range(self.ui.sourceTable.columnCount()):
