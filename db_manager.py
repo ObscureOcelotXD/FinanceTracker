@@ -26,7 +26,7 @@ def get_all_records():
     """Retrieves all records from the finance_data table."""
     con = get_connection()
     cur = con.cursor()
-    cur.execute("SELECT id, account_name, source_name, source_value, date_created FROM finance_data")
+    cur.execute("SELECT id, account_name, source_name, source_value FROM finance_data")
     records = cur.fetchall()
     con.close()
     return records
@@ -40,5 +40,15 @@ def insert_record(account_name, source_name, source_value):
         INSERT INTO finance_data (account_name, source_name, source_value, date_created)
         VALUES (?, ?, ?, ?)
     ''', (account_name, source_name, float(source_value), date_created))
+    con.commit()
+    con.close()
+
+def delete_record(row_id):
+    """Deletes a record from the database based on Id."""
+    con = get_connection()
+    cur = con.cursor()
+    cur.execute('''
+        DELETE FROM finance_data WHERE id=?
+    ''', (row_id,))
     con.commit()
     con.close()

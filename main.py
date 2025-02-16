@@ -11,7 +11,6 @@ from ui_main_window import Ui_FinanceTrackerHomeWindow
 from handlers.add_handler import add_source
 from handlers.edit_handler import handle_value_edit
 from handlers.delete_handler import delete_selected_row
-import csv_utils
 import db_manager
 
 CSV_FILENAME = "finance_data.csv"
@@ -64,7 +63,8 @@ class MainWindow(QMainWindow):
         # Group rows by account name
         groups = defaultdict(list)
         for row in records:
-            numeric_value, row_id, account_name, source_name, source_value = row
+            if len(row) < 4: continue #update to 5 when date is added in.
+            id, account_name, source_name, source_value = row
             groups[account_name].append(row)
 
         # Clear the table
@@ -81,19 +81,20 @@ class MainWindow(QMainWindow):
 
             account_total = 0.0
             # Insert each data row for this account
-            for numeric_value, row_id, account_name, source_name, source_value in account_rows:
+            for row_id, account_name, source_name, source_value in account_rows:
                 row_count = self.ui.sourceTable.rowCount()
                 self.ui.sourceTable.insertRow(row_count)
 
+                formatted_value = "${:,.2f}".format(source_value)
                 # Insert data into the row
                 self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(row_id))
                 self.ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(account_name))
                 self.ui.sourceTable.setItem(row_count, 2, QTableWidgetItem(source_name))
-                self.ui.sourceTable.setItem(row_count, 3, QTableWidgetItem(source_value))
+                self.ui.sourceTable.setItem(row_count, 3, QTableWidgetItem(formatted_value))
                 # Hidden numeric value in column 4 for sorting
-                self.ui.sourceTable.setItem(row_count, 4, QTableWidgetItem(str(numeric_value)))
+                self.ui.sourceTable.setItem(row_count, 4, QTableWidgetItem(str(source_value)))
 
-                account_total += numeric_value
+                account_total += source_value
 
                 # Optionally lock the first three columns from editing
                 for col in range(3):
@@ -136,61 +137,60 @@ class MainWindow(QMainWindow):
 
 
 
+    # def load_from_db(self):
+    #     """Loads CSV data into the table and appends a totals row at the bottom."""
+    #     #rows = csv_utils.load_csv_data()  # Only data rows from CSV
+    #     records = db_manager.get_all_records()
+    #     if records is None:
+    #         QMessageBox.warning(self, "Warning", "CSV file may be missing or has an unexpected format.")
+    #         return
 
+    #     # Sort rows by numeric value (ascending by default)
+    #     records.sort(key=lambda x: x[0])
+    #     self.ui.sourceTable.setSortingEnabled(False)  # Disable built-in sorting
+    #     self.ui.sourceTable.setRowCount(0)  # Clear table
 
-    def load_from_csv(self):
-        """Loads CSV data into the table and appends a totals row at the bottom."""
-        #rows = csv_utils.load_csv_data()  # Only data rows from CSV
-        records = db_manager.get_all_records()
-        if records is None:
-            QMessageBox.warning(self, "Warning", "CSV file may be missing or has an unexpected format.")
-            return
-
-        # Sort rows by numeric value (ascending by default)
-        records.sort(key=lambda x: x[0])
-        self.ui.sourceTable.setSortingEnabled(False)  # Disable built-in sorting
-        self.ui.sourceTable.setRowCount(0)  # Clear table
-
-        total_value = 0
-        # Insert each data row
-        for numeric_value, row_id, account_name, source_name, source_value in records:
-            row_count = self.ui.sourceTable.rowCount()
-            self.ui.sourceTable.insertRow(row_count)
-            self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(row_id))
-            self.ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(account_name))
-            self.ui.sourceTable.setItem(row_count, 2, QTableWidgetItem(source_name))
-            self.ui.sourceTable.setItem(row_count, 3, QTableWidgetItem(source_value))
-            # Store numeric value in hidden column (for sorting, if needed)
-            self.ui.sourceTable.setItem(row_count, 4, QTableWidgetItem(str(numeric_value)))
+    #     total_value = 0
+    #     # Insert each data row
+    #     for id, account_name, source_name, source_value in records:
+    #         row_count = self.ui.sourceTable.rowCount()
+    #         self.ui.sourceTable.insertRow(row_count)
+    #         self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(id))
+    #         self.ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(account_name))
+    #         self.ui.sourceTable.setItem(row_count, 2, QTableWidgetItem(source_name))
+    #         self.ui.sourceTable.setItem(row_count, 3, QTableWidgetItem(source_value))
+    #         numeric_value = float(source_value.replace("$", "").replace(",", ""))
+    #         # Store numeric value in hidden column (for sorting, if needed)
+    #         self.ui.sourceTable.setItem(row_count, 4, QTableWidgetItem(str(numeric_value)))
             
-            total_value += numeric_value
+    #         total_value += numeric_value
             
-            # Lock the first three columns so they’re not editable
-            for col in range(3):
-                self.ui.sourceTable.item(row_count, col).setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+    #         # Lock the first three columns so they’re not editable
+    #         for col in range(3):
+    #             self.ui.sourceTable.item(row_count, col).setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
 
-        # Append the totals row
-        totals_row = self.ui.sourceTable.rowCount()
-        self.ui.sourceTable.insertRow(totals_row)
+    #     # Append the totals row
+    #     totals_row = self.ui.sourceTable.rowCount()
+    #     self.ui.sourceTable.insertRow(totals_row)
 
-        # You might choose to display "Total" in the Account Name column (or whichever is appropriate)
-        total_label = QTableWidgetItem("Total")
-        total_label.setFlags(Qt.ItemIsEnabled)  # Make it read-only
-        self.ui.sourceTable.setItem(totals_row, 1, total_label)
+    #     # You might choose to display "Total" in the Account Name column (or whichever is appropriate)
+    #     total_label = QTableWidgetItem("Total")
+    #     total_label.setFlags(Qt.ItemIsEnabled)  # Make it read-only
+    #     self.ui.sourceTable.setItem(totals_row, 1, total_label)
 
-        # Display the total in the Source Value column; format as currency if desired.
-        total_display = QTableWidgetItem("${:,.2f}".format(total_value))
-        total_display.setFlags(Qt.ItemIsEnabled)
-        self.ui.sourceTable.setItem(totals_row, 3, total_display)
+    #     # Display the total in the Source Value column; format as currency if desired.
+    #     total_display = QTableWidgetItem("${:,.2f}".format(total_value))
+    #     total_display.setFlags(Qt.ItemIsEnabled)
+    #     self.ui.sourceTable.setItem(totals_row, 3, total_display)
 
-        # Optionally, style the totals row (for example, set a background color)
-        for col in range(self.ui.sourceTable.columnCount()):
-            item = self.ui.sourceTable.item(totals_row, col)
-            if item is not None:
-                item.setBackground(Qt.lightGray)
+    #     # Optionally, style the totals row (for example, set a background color)
+    #     for col in range(self.ui.sourceTable.columnCount()):
+    #         item = self.ui.sourceTable.item(totals_row, col)
+    #         if item is not None:
+    #             item.setBackground(Qt.lightGray)
 
-        self.ui.sourceTable.viewport().update()
-        self.ui.sourceTable.repaint()
+    #     self.ui.sourceTable.viewport().update()
+    #     self.ui.sourceTable.repaint()
 
 
     def sort_by_value(self):
@@ -205,24 +205,28 @@ class MainWindow(QMainWindow):
         if records is None:
             QMessageBox.warning(self, "Warning", "CSV file may be missing or has an unexpected format.")
             return
+        
+        # Sort the data by Source Value (numeric value).
+        sorted_rows = sorted(records, key=lambda x: (x[0], x[1]), reverse=not self.sort_ascending)
 
         self.ui.sourceTable.setRowCount(0)  # Clear table
 
         total_value = 0
         # Insert sorted data rows
-        for numeric_value, row_id, account_name, source_name, source_value in records:
+        for id, account_name, source_name, source_value in sorted_rows:
             row_count = self.ui.sourceTable.rowCount()
             self.ui.sourceTable.insertRow(row_count)
-            self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(row_id))
+            formatted_value = "${:,.2f}".format(source_value)
+            self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(id))
             self.ui.sourceTable.setItem(row_count, 1, QTableWidgetItem(account_name))
             self.ui.sourceTable.setItem(row_count, 2, QTableWidgetItem(source_name))
-            self.ui.sourceTable.setItem(row_count, 3, QTableWidgetItem(source_value))
+            self.ui.sourceTable.setItem(row_count, 3, QTableWidgetItem(formatted_value))
             # Hidden numeric value for sorting purposes
-            float_item = QTableWidgetItem(str(numeric_value))
-            float_item.setData(Qt.UserRole, numeric_value)
+            float_item = QTableWidgetItem(str(source_value))
+            float_item.setData(Qt.UserRole, source_value)
             self.ui.sourceTable.setItem(row_count, 4, float_item)
             
-            total_value += numeric_value
+            total_value += source_value
 
             # Lock the first three columns from editing
             for col in range(3):
@@ -274,7 +278,7 @@ class MainWindow(QMainWindow):
         """Resets the table to its initial state by reloading from CSV and populating group totals."""
         
         # Reload data from CSV file.
-        self.load_from_csv()
+        #self.load_from_db()
         
         # Populate table with group totals again.
         self.populate_table_with_group_totals()
