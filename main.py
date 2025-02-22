@@ -9,9 +9,11 @@ from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMessageBox
 from PySide6.QtCore import Qt
 from ui_main_window import Ui_FinanceTrackerHomeWindow
+from threading import Thread
 from handlers.add_handler import add_source
 from handlers.edit_handler import handle_value_edit
 from handlers.delete_handler import delete_selected_row
+from server import create_flask_app  # Import the Flask app factory function
 import db_manager
 
 CSV_FILENAME = "finance_data.csv"
@@ -225,26 +227,30 @@ class MainWindow(QMainWindow):
         
         # Populate table with group totals again.
         self.populate_table_with_group_totals()
-        
+
+
+def run_flask():
+    app = create_flask_app()
+    app.run(port=5000, use_reloader=False)  # Disable reloader if running in a thread
+
 
 if __name__ == "__main__":
-    # Start Flask server as a subprocess
-    flask_process = subprocess.Popen(
-        [sys.executable, "server.py"], 
-        stdout=subprocess.PIPE, 
-        stderr=subprocess.PIPE,
-        preexec_fn=None if sys.platform == "win32" else lambda: signal.signal(signal.SIGINT, signal.SIG_IGN)
-    )
+    # Start Flask server in a separate thread
+    flask_thread = Thread(target=run_flask)
+    flask_thread.daemon = True  # Ensure the thread exits when the main program does
+    flask_thread.start()
 
+    # Start the Qt application
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
 
-    # Run the application and wait for the UI to close
-    exit_code = app.exec()
-
-    # Stop Flask server when UI closes
-    flask_process.terminate()  # Sends SIGTERM
-    flask_process.wait()  # Ensures Flask fully stops before exiting
+    # Run the application event loop
+    try:
+        exit_code = app.exec()
+    finally:
+        # Perform any necessary cleanup here
+        print("Shutting down the application...")
 
     sys.exit(exit_code)
+

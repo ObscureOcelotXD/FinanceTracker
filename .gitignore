@@ -19,3 +19,4 @@ build/
 dist/
 
 finance_data.csv
+.env

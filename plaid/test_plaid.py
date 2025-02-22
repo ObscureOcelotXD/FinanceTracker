@@ -32,7 +32,7 @@ client = plaid_api.PlaidApi(api_client)
 # ✅ Step 1: Create a public token (simulating a user linking a bank account)
 request = SandboxPublicTokenCreateRequest(
     institution_id="ins_109508",  # Simulated Chase Bank
-    initial_products = [Products("auth"), Products("transactions")]
+    initial_products = [Products("auth"), Products("transactions")]  # 🛠 Use Products Enum instead of strings
 )
 
 response = client.sandbox_public_token_create(request)
