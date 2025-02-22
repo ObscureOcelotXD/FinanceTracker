@@ -2,6 +2,7 @@ import sys
 import csv
 import re
 import os
+import subprocess
 from datetime import datetime
 from collections import defaultdict
 from PySide6.QtGui import QBrush, QColor
@@ -224,9 +225,26 @@ class MainWindow(QMainWindow):
         
         # Populate table with group totals again.
         self.populate_table_with_group_totals()
+        
 
 if __name__ == "__main__":
+    # Start Flask server as a subprocess
+    flask_process = subprocess.Popen(
+        [sys.executable, "server.py"], 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.PIPE,
+        preexec_fn=None if sys.platform == "win32" else lambda: signal.signal(signal.SIGINT, signal.SIG_IGN)
+    )
+
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    sys.exit(app.exec())
+
+    # Run the application and wait for the UI to close
+    exit_code = app.exec()
+
+    # Stop Flask server when UI closes
+    flask_process.terminate()  # Sends SIGTERM
+    flask_process.wait()  # Ensures Flask fully stops before exiting
+
+    sys.exit(exit_code)
