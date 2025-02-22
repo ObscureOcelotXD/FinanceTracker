@@ -47,8 +47,10 @@ def delete_record(row_id):
     """Deletes a record from the database based on Id."""
     con = get_connection()
     cur = con.cursor()
+    print(f"Executing DELETE FROM finance_data WHERE id={row_id}")
     cur.execute('''
         DELETE FROM finance_data WHERE id=?
     ''', (row_id,))
     con.commit()
     con.close()
+    print(f"Record with Id: {row_id} deleted from the database")

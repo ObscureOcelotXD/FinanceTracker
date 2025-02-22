@@ -18,7 +18,7 @@ def handle_value_edit(main_window, item):
 
     # Get updated value and print debug info
     new_value = item.text().strip()
-    print(f"🔹 Editing Row {row}, Column {column}, New Value: '{new_value}'")
+    #print(f"🔹 Editing Row {row}, Column {column}, New Value: '{new_value}'")
 
     # Ignore empty edits
     if not new_value:
@@ -47,7 +47,7 @@ def handle_value_edit(main_window, item):
     # Check if this is the totals row (or an invalid row) and skip processing
     if row_id is None or not row_id.isdigit():
         # If the row doesn't have a valid numeric id, assume it's the totals row
-        print(f"Skipping edit on totals or non-data row at row {row}")
+        #print(f"Skipping edit on totals or non-data row at row {row}")
         return
     
 
