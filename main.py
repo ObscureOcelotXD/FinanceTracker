@@ -231,13 +231,13 @@ class MainWindow(QMainWindow):
 
 def run_flask():
     app = create_flask_app()
-    app.run(port=5000, use_reloader=False)  # Disable reloader if running in a thread
+    print("🚀 Starting Flask on http://127.0.0.1:5000")  # Debug message
+    app.run(host="127.0.0.1", port=5000, use_reloader=False)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     # Start Flask server in a separate thread
-    flask_thread = Thread(target=run_flask)
-    flask_thread.daemon = True  # Ensure the thread exits when the main program does
+    flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
     # Start the Qt application

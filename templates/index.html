@@ -13,30 +13,27 @@
             fetch('/create_link_token', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
+                    console.log("📢 Response from Flask:", data); // Debugging
+    
+                    if (!data.link_token) {
+                        console.error("🚨 Error: No link token received!", data);
+                        return;
+                    }
+    
                     const handler = Plaid.create({
                         token: data.link_token,
                         onSuccess: function(public_token, metadata) {
-                            // Send public_token to your server
-                            fetch('/exchange_public_token', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ public_token: public_token })
-                            }).then(response => {
-                                if (response.ok) {
-                                    alert('Bank account linked successfully!');
-                                } else {
-                                    alert('Error linking bank account.');
-                                }
-                            });
+                            console.log("✅ Success! Public Token:", public_token);
                         },
                         onExit: function(err, metadata) {
-                            // Handle the case when your user exits Link
-                            if (err) {
-                                console.error('Error during Plaid Link: ', err);
-                            }
+                            if (err) console.error("🚨 Plaid Link Error:", err);
                         }
                     });
+    
                     handler.open();
+                })
+                .catch(error => {
+                    console.error("🚨 Fetch Error:", error);
                 });
         };
     </script>
