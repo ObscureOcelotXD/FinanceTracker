@@ -23,10 +23,23 @@
                     const handler = Plaid.create({
                         token: data.link_token,
                         onSuccess: function(public_token, metadata) {
-                            console.log("✅ Success! Public Token:", public_token);
+                        // Send the public_token to your backend for exchange
+                            fetch('/exchange_public_token', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ public_token: public_token })
+                            })
+                            .then(response => response.json())
+                            .then(exchangeData => {
+                                console.log("Exchange response:", exchangeData);
+                                // Now you have the access token; you can call other endpoints if needed
+                            })
+                            .catch(error => {
+                                console.error("Error exchanging token:", error);
+                            });
                         },
                         onExit: function(err, metadata) {
-                            if (err) console.error("🚨 Plaid Link Error:", err);
+                        if (err) console.error("Plaid Link Error:", err);
                         }
                     });
     

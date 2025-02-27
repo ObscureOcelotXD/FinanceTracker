@@ -9,6 +9,7 @@ from plaid.model.country_code import CountryCode
 from plaid.configuration import Configuration
 from plaid.api_client import ApiClient
 import os
+import sqlite3
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -44,8 +45,6 @@ client = plaid_api.PlaidApi(api_client)
 @app.route('/')
 def index():
     return render_template('index.html')  # Serve the HTML page
-
-
 
 
 
@@ -86,6 +85,54 @@ def create_flask_app():
         
         except Exception as e:
             print(f"❌ ERROR in /create_link_token: {str(e)}")  # Debugging output
+            return jsonify({"error": str(e)}), 500
+
+
+    
+    @app.route('/exchange_public_token', methods=['POST'])
+    def exchange_public_token():
+        data = request.get_json()
+        public_token = data.get("public_token")
+        if not public_token:
+            return jsonify({"error": "Missing public_token"}), 400
+
+        try:
+            # Exchange the public token for an access token using Plaid API
+            exchange_request = ItemPublicTokenExchangeRequest(public_token=public_token)
+            exchange_response = client.item_public_token_exchange(exchange_request)
+            access_token = exchange_response.access_token
+            item_id = exchange_response.item_id
+
+            # Store the access token and item_id in a SQLite database
+            conn = sqlite3.connect("finance_data.db")
+            c = conn.cursor()
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS items (
+                    item_id TEXT PRIMARY KEY,
+                    access_token TEXT
+                )
+            """)
+            c.execute("INSERT OR REPLACE INTO items (item_id, access_token) VALUES (?, ?)",
+                      (item_id, access_token))
+            conn.commit()
+            conn.close()
+
+            return jsonify({"access_token": access_token, "item_id": item_id})
+        except Exception as e:
+            print(f"❌ ERROR exchanging public token: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+    
+    from plaid.model.accounts_get_request import AccountsGetRequest
+
+    @app.route('/get_accounts', methods=['GET'])
+    def get_accounts():
+        try:
+            # You might retrieve the access token from your SQLite database based on the item_id
+            access_token = "retrieved-access-token"  # Replace with actual retrieval logic
+            accounts_request = AccountsGetRequest(access_token=access_token)
+            accounts_response = client.accounts_get(accounts_request)
+            return jsonify(accounts_response.to_dict())
+        except Exception as e:
             return jsonify({"error": str(e)}), 500
         
     return app
