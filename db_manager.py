@@ -19,8 +19,33 @@ def init_db():
             date_created TEXT NOT NULL
         )
     ''')
+
+    cur2 = con.cursor()
+    cur2.execute("""
+        CREATE TABLE IF NOT EXISTS accounts (
+            account_id TEXT PRIMARY KEY,
+            name TEXT,
+            official_name TEXT,
+            type TEXT,
+            subtype TEXT,
+            current_balance REAL
+        )
+    """)
+
+    cur3 = con.cursor()
+    cur3.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            transaction_id TEXT PRIMARY KEY,
+            account_id TEXT,
+            amount REAL,
+            date TEXT,
+            name TEXT,
+            category TEXT
+        )
+    """)
     con.commit()
     con.close()
+
 
 def get_all_records():
     """Retrieves all records from the finance_data table."""

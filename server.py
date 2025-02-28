@@ -8,6 +8,11 @@ from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
 from plaid.configuration import Configuration
 from plaid.api_client import ApiClient
+from plaid.model.transactions_get_request import TransactionsGetRequest
+from plaid.model.accounts_get_request import AccountsGetRequest
+
+from datetime import datetime, timedelta
+import logging
 import os
 import sqlite3
 from dotenv import load_dotenv
@@ -49,17 +54,20 @@ def index():
 
 
 
-@app.route('/exchange_public_token', methods=['POST'])
-def exchange_public_token():
-    public_token = request.json.get('public_token')
-    exchange_request = ItemPublicTokenExchangeRequest(public_token=public_token)
-    exchange_response = client.item_public_token_exchange(exchange_request)
-    access_token = exchange_response.access_token
-    # Store access_token securely for future use
-    return jsonify({'status': 'success'})
+# @app.route('/exchange_public_token', methods=['POST'])
+# def exchange_public_token():
+#     public_token = request.json.get('public_token')
+#     exchange_request = ItemPublicTokenExchangeRequest(public_token=public_token)
+#     exchange_response = client.item_public_token_exchange(exchange_request)
+#     access_token = exchange_response.access_token
+#     # Store access_token securely for future use
+#     return jsonify({'status': 'success'})
 
 
 def create_flask_app():
+    # Configure logging
+    logging.basicConfig(level=logging.DEBUG)
+
     app = Flask(__name__)
 
     @app.route('/')
@@ -81,6 +89,7 @@ def create_flask_app():
                 redirect_uri=os.getenv("PLAID_REDIRECT_URI")  # Must match the one registered in Plaid Dashboard
             )
             response = client.link_token_create(request)
+            app.logger.debug("Link Token Creation Response: %s", response.to_dict() if hasattr(response, "to_dict") else response)
             return jsonify({"link_token": response.link_token})
         
         except Exception as e:
@@ -95,15 +104,16 @@ def create_flask_app():
         public_token = data.get("public_token")
         if not public_token:
             return jsonify({"error": "Missing public_token"}), 400
-
         try:
-            # Exchange the public token for an access token using Plaid API
-            exchange_request = ItemPublicTokenExchangeRequest(public_token=public_token)
+            exchange_request = ItemPublicTokenExchangeRequest(
+                public_token=public_token
+                #,webhook=os.getenv('PLAID_REDIRECT_URI_WEBHOOK')
+                )
             exchange_response = client.item_public_token_exchange(exchange_request)
             access_token = exchange_response.access_token
             item_id = exchange_response.item_id
 
-            # Store the access token and item_id in a SQLite database
+            # Insert into items table (your existing functionality)
             conn = sqlite3.connect("finance_data.db")
             c = conn.cursor()
             c.execute("""
@@ -117,23 +127,91 @@ def create_flask_app():
             conn.commit()
             conn.close()
 
+            # Now you can call functions to store additional data:
+            store_accounts(client, access_token)
+            store_transactions(client, access_token)
+
             return jsonify({"access_token": access_token, "item_id": item_id})
         except Exception as e:
-            print(f"❌ ERROR exchanging public token: {str(e)}")
+            print(f"Error exchanging public token: {str(e)}")
             return jsonify({"error": str(e)}), 500
     
-    from plaid.model.accounts_get_request import AccountsGetRequest
 
-    @app.route('/get_accounts', methods=['GET'])
-    def get_accounts():
-        try:
-            # You might retrieve the access token from your SQLite database based on the item_id
-            access_token = "retrieved-access-token"  # Replace with actual retrieval logic
-            accounts_request = AccountsGetRequest(access_token=access_token)
-            accounts_response = client.accounts_get(accounts_request)
-            return jsonify(accounts_response.to_dict())
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
+    def store_accounts(client, access_token):
+        # Create a request to get accounts data
+        request = AccountsGetRequest(access_token=access_token)
+        response = client.accounts_get(request)
+        accounts = response.accounts
+
+        # Connect to SQLite and insert each account
+        conn = sqlite3.connect("finance_data.db")
+        c = conn.cursor()
+        for account in accounts:
+            c.execute("""
+                INSERT OR REPLACE INTO accounts 
+                (account_id, name, official_name, type, subtype, current_balance)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                account.account_id,
+                account.name,
+                account.official_name,
+                str(account.type),
+                str(account.subtype),
+                account.balances.current
+            ))
+        conn.commit()
+        conn.close()
+
+
+    def store_transactions(client, access_token):
+        # Define a date range for transactions (e.g., last 30 days) as date objects
+        start_date = (datetime.now() - timedelta(days=30)).date()
+        end_date = datetime.now().date()
+        
+        request = TransactionsGetRequest(
+            access_token=access_token,
+            start_date=start_date,
+            end_date=end_date
+        )
+        response = client.transactions_get(request)
+        transactions = response.transactions
+
+        # Connect to SQLite and insert each transaction
+        conn = sqlite3.connect("finance_data.db")
+        c = conn.cursor()
+        for txn in transactions:
+            # Concatenate categories if present
+            category = ", ".join(txn.category) if txn.category else ""
+            c.execute("""
+                INSERT OR REPLACE INTO transactions 
+                (transaction_id, account_id, amount, date, name, category)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                txn.transaction_id,
+                txn.account_id,
+                txn.amount,
+                txn.date,
+                txn.name,
+                category
+            ))
+        conn.commit()
+        conn.close()
+
+    @app.route('/webhook', methods=['POST'])
+    def webhook():
+        data = request.get_json()
+        print("Received webhook:", data)
+        return jsonify({"status": "received"}), 200
+    # @app.route('/get_accounts', methods=['GET'])
+    # def get_accounts():
+    #     try:
+    #         # You might retrieve the access token from your SQLite database based on the item_id
+    #         access_token = "retrieved-access-token"  # Replace with actual retrieval logic
+    #         accounts_request = AccountsGetRequest(access_token=access_token)
+    #         accounts_response = client.accounts_get(accounts_request)
+    #         return jsonify(accounts_response.to_dict())
+    #     except Exception as e:
+    #         return jsonify({"error": str(e)}), 500
         
     return app
 

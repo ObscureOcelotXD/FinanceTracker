@@ -39,7 +39,8 @@ def create_link_token():
         products=[Products.TRANSACTIONS],
         country_codes=[CountryCode.US],
         language='en',
-        redirect_uri=os.getenv('PLAID_REDIRECT_URI')
+        redirect_uri=os.getenv('PLAID_REDIRECT_URI'),
+        webhook=os.getenv('PLAID_REDIRECT_URI_WEBHOOK') 
     )
     response = client.link_token_create(request)
     link_token = response['link_token']
