@@ -10,11 +10,14 @@ from plaid.configuration import Configuration
 from plaid.api_client import ApiClient
 from plaid.model.transactions_get_request import TransactionsGetRequest
 from plaid.model.accounts_get_request import AccountsGetRequest
-
+from flask import Flask, render_template
+from dash import Dash, html, dcc, Input, Output  # Import Dash components
+import dash_bootstrap_components as dbc  # Optional for styling
 from datetime import datetime, timedelta
 import logging
 import os
 import sqlite3
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -202,18 +205,56 @@ def create_flask_app():
         data = request.get_json()
         print("Received webhook:", data)
         return jsonify({"status": "received"}), 200
-    # @app.route('/get_accounts', methods=['GET'])
-    # def get_accounts():
-    #     try:
-    #         # You might retrieve the access token from your SQLite database based on the item_id
-    #         access_token = "retrieved-access-token"  # Replace with actual retrieval logic
-    #         accounts_request = AccountsGetRequest(access_token=access_token)
-    #         accounts_response = client.accounts_get(accounts_request)
-    #         return jsonify(accounts_response.to_dict())
-    #     except Exception as e:
-    #         return jsonify({"error": str(e)}), 500
-        
+
     return app
+
+# Now, create a Dash app using the Flask app's server
+dash_app = Dash(
+    __name__,
+    server=app,           # Use the existing Flask app as the server
+    url_base_pathname='/dashboard/',  # The URL path where the Dash app will live
+    external_stylesheets=[dbc.themes.BOOTSTRAP]  # Optional
+)
+
+# # Define a simple layout for the Dash app
+# dash_app.layout = html.Div([
+#     html.H1("Finance Dashboard"),
+#     dcc.Graph(
+#         id='sample-graph',
+#         figure={
+#             'data': [
+#                 {'x': [1, 2, 3], 'y': [4, 1, 2], 'type': 'bar', 'name': 'Test Data'},
+#             ],
+#             'layout': {
+#                 'title': 'Sample Dashboard'
+#             }
+#         }
+#     ),
+#     dcc.Interval(
+#         id='interval-component',
+#         interval=60*1000,  # Update every minute, if desired
+#         n_intervals=0
+#     )
+# ])
+
+# Example callback to update data (you can connect this to your database)
+@dash_app.callback(
+    Output('sample-graph', 'figure'),
+    [Input('interval-component', 'n_intervals')]
+)
+
+def update_graph(n):
+    # Here you would fetch new data from your SQLite database, for instance.
+    # For now, we'll return a static figure.
+    return {
+        'data': [
+            {'x': [1, 2, 3], 'y': [4+n, 1+n, 2+n], 'type': 'bar', 'name': 'Test Data'},
+        ],
+        'layout': {
+            'title': 'Sample Dashboard'
+        }
+    }
+
 
 if __name__ == '__main__':
     app = create_flask_app()

@@ -10,6 +10,8 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QMess
 from PySide6.QtCore import Qt
 from ui_main_window import Ui_FinanceTrackerHomeWindow
 from threading import Thread
+from dash import Dash, html, dcc
+import dash_bootstrap_components as dbc  # Optional for styling
 from handlers.add_handler import add_source
 from handlers.edit_handler import handle_value_edit
 from handlers.delete_handler import delete_selected_row
@@ -232,6 +234,40 @@ class MainWindow(QMainWindow):
 def run_flask():
     app = create_flask_app()
     print("🚀 Starting Flask on http://127.0.0.1:5000")  # Debug message
+    #app.run(host="127.0.0.1", port=5000, use_reloader=False)
+
+    # Initialize the Dash app and mount it on the Flask server
+    dash_app = Dash(
+        __name__,
+        server=app,                    # Use the existing Flask app as the server
+        url_base_pathname='/dashboard/',      # Dash will be served at /dashboard/
+        external_stylesheets=[dbc.themes.BOOTSTRAP]  # Optional styling
+    )
+    
+    # Define a simple layout for the Dash app
+    dash_app.layout = html.Div([
+        html.H1("Finance Dashboard"),
+        dcc.Graph(
+            id='sample-graph',
+            figure={
+                'data': [
+                    {'x': [1, 2, 3], 'y': [4, 1, 2], 'type': 'bar', 'name': 'Sample Data'},
+                ],
+                'layout': {
+                    'title': 'Sample Dashboard'
+                }
+            }
+        ),
+        dcc.Interval(
+            id='interval-component',
+            interval=60*1000,  # update every minute
+            n_intervals=0
+        )
+    ])
+    
+    # Optional: add callbacks to update your dashboard here.
+    
+    print("🚀 Starting Flask (with Dash) on http://127.0.0.1:5000")
     app.run(host="127.0.0.1", port=5000, use_reloader=False)
 
 
