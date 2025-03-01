@@ -11,12 +11,13 @@ from plaid.api_client import ApiClient
 from plaid.model.transactions_get_request import TransactionsGetRequest
 from plaid.model.accounts_get_request import AccountsGetRequest
 from flask import Flask, render_template
-from dash import Dash, html, dcc, Input, Output  # Import Dash components
+from dash import Dash, Input, Output  # Import Dash components
 import dash_bootstrap_components as dbc  # Optional for styling
 from datetime import datetime, timedelta
 import logging
 import os
-import sqlite3
+import db_manager
+import plotly.express as px
 
 from dotenv import load_dotenv
 
@@ -53,18 +54,6 @@ client = plaid_api.PlaidApi(api_client)
 @app.route('/')
 def index():
     return render_template('index.html')  # Serve the HTML page
-
-
-
-
-# @app.route('/exchange_public_token', methods=['POST'])
-# def exchange_public_token():
-#     public_token = request.json.get('public_token')
-#     exchange_request = ItemPublicTokenExchangeRequest(public_token=public_token)
-#     exchange_response = client.item_public_token_exchange(exchange_request)
-#     access_token = exchange_response.access_token
-#     # Store access_token securely for future use
-#     return jsonify({'status': 'success'})
 
 
 def create_flask_app():
@@ -116,21 +105,8 @@ def create_flask_app():
             access_token = exchange_response.access_token
             item_id = exchange_response.item_id
 
-            # Insert into items table (your existing functionality)
-            conn = sqlite3.connect("finance_data.db")
-            c = conn.cursor()
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS items (
-                    item_id TEXT PRIMARY KEY,
-                    access_token TEXT
-                )
-            """)
-            c.execute("INSERT OR REPLACE INTO items (item_id, access_token) VALUES (?, ?)",
-                      (item_id, access_token))
-            conn.commit()
-            conn.close()
+            db_manager.insert_items(item_id, access_token)
 
-            # Now you can call functions to store additional data:
             store_accounts(client, access_token)
             store_transactions(client, access_token)
 
@@ -147,23 +123,8 @@ def create_flask_app():
         accounts = response.accounts
 
         # Connect to SQLite and insert each account
-        conn = sqlite3.connect("finance_data.db")
-        c = conn.cursor()
-        for account in accounts:
-            c.execute("""
-                INSERT OR REPLACE INTO accounts 
-                (account_id, name, official_name, type, subtype, current_balance)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                account.account_id,
-                account.name,
-                account.official_name,
-                str(account.type),
-                str(account.subtype),
-                account.balances.current
-            ))
-        conn.commit()
-        conn.close()
+        db_manager.store_accounts(accounts)
+
 
 
     def store_transactions(client, access_token):
@@ -178,27 +139,8 @@ def create_flask_app():
         )
         response = client.transactions_get(request)
         transactions = response.transactions
+        db_manager.insert_transactions(transactions)
 
-        # Connect to SQLite and insert each transaction
-        conn = sqlite3.connect("finance_data.db")
-        c = conn.cursor()
-        for txn in transactions:
-            # Concatenate categories if present
-            category = ", ".join(txn.category) if txn.category else ""
-            c.execute("""
-                INSERT OR REPLACE INTO transactions 
-                (transaction_id, account_id, amount, date, name, category)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                txn.transaction_id,
-                txn.account_id,
-                txn.amount,
-                txn.date,
-                txn.name,
-                category
-            ))
-        conn.commit()
-        conn.close()
 
     @app.route('/webhook', methods=['POST'])
     def webhook():
@@ -208,54 +150,5 @@ def create_flask_app():
 
     return app
 
-# Now, create a Dash app using the Flask app's server
-dash_app = Dash(
-    __name__,
-    server=app,           # Use the existing Flask app as the server
-    url_base_pathname='/dashboard/',  # The URL path where the Dash app will live
-    external_stylesheets=[dbc.themes.BOOTSTRAP]  # Optional
-)
-
-# # Define a simple layout for the Dash app
-# dash_app.layout = html.Div([
-#     html.H1("Finance Dashboard"),
-#     dcc.Graph(
-#         id='sample-graph',
-#         figure={
-#             'data': [
-#                 {'x': [1, 2, 3], 'y': [4, 1, 2], 'type': 'bar', 'name': 'Test Data'},
-#             ],
-#             'layout': {
-#                 'title': 'Sample Dashboard'
-#             }
-#         }
-#     ),
-#     dcc.Interval(
-#         id='interval-component',
-#         interval=60*1000,  # Update every minute, if desired
-#         n_intervals=0
-#     )
-# ])
-
-# Example callback to update data (you can connect this to your database)
-@dash_app.callback(
-    Output('sample-graph', 'figure'),
-    [Input('interval-component', 'n_intervals')]
-)
-
-def update_graph(n):
-    # Here you would fetch new data from your SQLite database, for instance.
-    # For now, we'll return a static figure.
-    return {
-        'data': [
-            {'x': [1, 2, 3], 'y': [4+n, 1+n, 2+n], 'type': 'bar', 'name': 'Test Data'},
-        ],
-        'layout': {
-            'title': 'Sample Dashboard'
-        }
-    }
-
-
 if __name__ == '__main__':
-    app = create_flask_app()
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -79,3 +79,72 @@ def delete_record(row_id):
     con.commit()
     con.close()
     print(f"Record with Id: {row_id} deleted from the database")
+
+def insert_items(item_id, access_token):
+     # Insert into items table (your existing functionality)
+    conn = sqlite3.connect("finance_data.db")
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS items (
+            item_id TEXT PRIMARY KEY,
+            access_token TEXT
+        )
+    """)
+    c.execute("INSERT OR REPLACE INTO items (item_id, access_token) VALUES (?, ?)",
+                (item_id, access_token))
+    conn.commit()
+    conn.close()
+
+def store_accounts(accounts):
+    conn = sqlite3.connect("finance_data.db")
+    c = conn.cursor()
+    for account in accounts:
+        c.execute("""
+            INSERT OR REPLACE INTO accounts 
+            (account_id, name, official_name, type, subtype, current_balance)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            account.account_id,
+            account.name,
+            account.official_name,
+            str(account.type),
+            str(account.subtype),
+            account.balances.current
+        ))
+    conn.commit()
+    conn.close()
+
+def insert_transactions(transactions):
+    # Connect to SQLite and insert each transaction
+    conn = sqlite3.connect("finance_data.db")
+    c = conn.cursor()
+    for txn in transactions:
+        # Concatenate categories if present
+        category = ", ".join(txn.category) if txn.category else ""
+        c.execute("""
+            INSERT OR REPLACE INTO transactions 
+            (transaction_id, account_id, amount, date, name, category)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            txn.transaction_id,
+            txn.account_id,
+            txn.amount,
+            txn.date,
+            txn.name,
+            category
+        ))
+    conn.commit()
+    conn.close()
+
+import sqlite3
+import pandas as pd
+
+def get_account_balances():
+    # Connect to your SQLite database
+    conn = get_connection()
+    # Write your query - adjust column names as needed
+    query = "SELECT account_id, current_balance FROM accounts"
+    # Load data into a Pandas DataFrame
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    return df

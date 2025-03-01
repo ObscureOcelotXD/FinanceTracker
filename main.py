@@ -2,7 +2,7 @@ import sys
 import csv
 import re
 import os
-import subprocess
+import subprocess 
 from datetime import datetime
 from collections import defaultdict
 from PySide6.QtGui import QBrush, QColor
@@ -15,8 +15,11 @@ import dash_bootstrap_components as dbc  # Optional for styling
 from handlers.add_handler import add_source
 from handlers.edit_handler import handle_value_edit
 from handlers.delete_handler import delete_selected_row
-from server import create_flask_app  # Import the Flask app factory function
+from runServer import flask_app
 import db_manager
+import dashApp
+import dash_callbacks
+print(flask_app.url_map)
 
 CSV_FILENAME = "finance_data.csv"
 
@@ -232,43 +235,10 @@ class MainWindow(QMainWindow):
 
 
 def run_flask():
-    app = create_flask_app()
-    print("🚀 Starting Flask on http://127.0.0.1:5000")  # Debug message
-    #app.run(host="127.0.0.1", port=5000, use_reloader=False)
-
-    # Initialize the Dash app and mount it on the Flask server
-    dash_app = Dash(
-        __name__,
-        server=app,                    # Use the existing Flask app as the server
-        url_base_pathname='/dashboard/',      # Dash will be served at /dashboard/
-        external_stylesheets=[dbc.themes.BOOTSTRAP]  # Optional styling
-    )
-    
-    # Define a simple layout for the Dash app
-    dash_app.layout = html.Div([
-        html.H1("Finance Dashboard"),
-        dcc.Graph(
-            id='sample-graph',
-            figure={
-                'data': [
-                    {'x': [1, 2, 3], 'y': [4, 1, 2], 'type': 'bar', 'name': 'Sample Data'},
-                ],
-                'layout': {
-                    'title': 'Sample Dashboard'
-                }
-            }
-        ),
-        dcc.Interval(
-            id='interval-component',
-            interval=60*1000,  # update every minute
-            n_intervals=0
-        )
-    ])
-    
     # Optional: add callbacks to update your dashboard here.
-    
     print("🚀 Starting Flask (with Dash) on http://127.0.0.1:5000")
-    app.run(host="127.0.0.1", port=5000, use_reloader=False)
+    flask_app.run(host="127.0.0.1", port=5000, use_reloader=False)
+
 
 
 if __name__ == '__main__':
