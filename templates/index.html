@@ -7,7 +7,7 @@
 </head>
 <body>
     <button id="linkButton">Connect a bank account</button>
-
+    <button onclick="window.location.href='/dashboard/'">View Metrics</button>
     <script>
         document.getElementById('linkButton').onclick = function() {
             fetch('/create_link_token', { method: 'POST' })

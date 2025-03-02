@@ -148,3 +148,12 @@ def get_account_balances():
     df = pd.read_sql_query(query, conn)
     conn.close()
     return df
+
+
+def get_all_records_df():
+    """Retrieves all records from the finance_data table."""
+    con = get_connection()
+    query = "SELECT id, account_name, source_name, source_value,date_created FROM finance_data"
+    df = pd.read_sql_query(query, con)
+    con.close()
+    return df

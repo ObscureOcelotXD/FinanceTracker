@@ -17,5 +17,7 @@ dash_app = Dash(
 dash_app.layout = html.Div([
     html.H1("Finance Dashboard"),
     dcc.Graph(id='sample-graph'),  # The graph will be updated via callbacks
+    dcc.Graph(id='pie-chart'),
+    dcc.Graph(id='line-graph'),   
     dcc.Interval(id='interval-component', interval=60*1000, n_intervals=0)
 ])
