@@ -89,7 +89,7 @@ class MainWindow(QMainWindow):
             for id, account_name, source_name, source_value in account_rows:
                 row_count = self.ui.sourceTable.rowCount()
                 self.ui.sourceTable.insertRow(row_count)
-                print(f"Row count: {id}, {account_name}, {source_name}, {source_value}")
+                #print(f"Row count: {id}, {account_name}, {source_name}, {source_value}")
                 formatted_value = "${:,.2f}".format(source_value)
                 # Insert data into the row
                 self.ui.sourceTable.setItem(row_count, 0, QTableWidgetItem(str(id)))

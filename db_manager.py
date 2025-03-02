@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime
 import sqlite3
 import pandas as pd
-
+import re
 DATABASE = "finance_data.db"
 
 def get_connection():
@@ -63,28 +63,60 @@ def get_all_records():
     return records
 
 def insert_record(account_name, source_name, source_value):
-    """Inserts a new record into the database."""
-    con = get_connection()
-    cur = con.cursor()
-    date_created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cur.execute('''
-        INSERT INTO finance_data (account_name, source_name, source_value, date_created)
-        VALUES (?, ?, ?, ?)
-    ''', (account_name, source_name, float(source_value), date_created))
-    con.commit()
-    con.close()
+    # Validate inputs
+    if not re.match("^[a-zA-Z0-9_]+$", account_name):
+        raise ValueError("Invalid account name")
+    if not re.match("^[a-zA-Z0-9_]+$", source_name):
+        raise ValueError("Invalid source name")
+    try:
+        source_value = float(source_value)
+    except ValueError:
+        raise ValueError("Source value must be a number")
+
+
+    try:
+        con = get_connection()
+        cur = con.cursor()
+        date_created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute('''
+            INSERT INTO finance_data (account_name, source_name, source_value, date_created)
+            VALUES (?, ?, ?, ?)
+        ''', (account_name, source_name, float(source_value), date_created))
+        con.commit()
+    except sqlite3.DatabaseError as e:
+        # Handle database errors
+        print(f"Database error occurred: {e}")
+    except Exception as e:
+        # Handle other exceptions
+        print(f"An error occurred: {e}")
+    finally:
+        if con:
+            con.close()
 
 def delete_record(row_id):
-    """Deletes a record from the database based on Id."""
-    con = get_connection()
-    cur = con.cursor()
-    print(f"Executing DELETE FROM finance_data WHERE id={row_id}")
-    cur.execute('''
-        DELETE FROM finance_data WHERE id=?
-    ''', (row_id,))
-    con.commit()
-    con.close()
-    print(f"Record with Id: {row_id} deleted from the database")
+    # Validate inputs
+    try:
+        row_id = int(row_id)
+    except ValueError:
+        raise ValueError("Invalid row_id. It must be an integer.")
+    try:
+        con = get_connection()
+        cur = con.cursor()
+        print(f"Executing DELETE FROM finance_data WHERE id={row_id}")
+        cur.execute('''
+            DELETE FROM finance_data WHERE id=?
+        ''', (row_id,))
+        con.commit()
+        print(f"Record with Id: {row_id} deleted from the database")
+    except ValueError:
+        print("Invalid row_id. It must be an integer.")
+    except sqlite3.DatabaseError as e:
+        print(f"Database error occurred: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+    finally:
+        if con:
+            con.close()
 
 def insert_items(item_id, access_token):
      # Insert into items table (your existing functionality)
