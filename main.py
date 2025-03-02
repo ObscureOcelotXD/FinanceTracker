@@ -23,6 +23,7 @@ print(flask_app.url_map)
 
 CSV_FILENAME = "finance_data.csv"
 
+# region PySide6 UI Code
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -232,7 +233,7 @@ class MainWindow(QMainWindow):
         
         # Populate table with group totals again.
         self.populate_table_with_group_totals()
-
+# endregion
 
 def run_flask():
     # Optional: add callbacks to update your dashboard here.

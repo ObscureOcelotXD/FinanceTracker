@@ -27,6 +27,8 @@ load_dotenv()
 app = Flask(__name__)
 app.config["DEBUG"] = True
 
+#region Plaid API Configuration
+
 # Convert PLAID_ENV string to the correct Plaid Environment object
 PLAID_ENV = os.getenv("PLAID_ENV", "sandbox").strip().lower()  # Ensure no spaces
 
@@ -150,5 +152,9 @@ def create_flask_app():
 
     return app
 
+# endregion
+
+
 if __name__ == '__main__':
+    #app = create_flask_app() # uncomment to run app fron this file.
     app.run(host="0.0.0.0", port=5000, debug=True)

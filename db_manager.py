@@ -1,11 +1,14 @@
 import sqlite3
 from datetime import datetime
+import sqlite3
+import pandas as pd
 
 DATABASE = "finance_data.db"
 
 def get_connection():
     return sqlite3.connect(DATABASE)
 
+# region Initialization
 def init_db():
     """Initializes the database and creates the table if it doesn't exist."""
     con = get_connection()
@@ -46,7 +49,10 @@ def init_db():
     con.commit()
     con.close()
 
+# endregion
 
+
+# region UI and API Crud Operations
 def get_all_records():
     """Retrieves all records from the finance_data table."""
     con = get_connection()
@@ -135,10 +141,10 @@ def insert_transactions(transactions):
         ))
     conn.commit()
     conn.close()
+#endregion
 
-import sqlite3
-import pandas as pd
 
+# region Data Retrieval for Dash App using Pandas DataFrame
 def get_account_balances():
     # Connect to your SQLite database
     conn = get_connection()
@@ -157,3 +163,4 @@ def get_all_records_df():
     df = pd.read_sql_query(query, con)
     con.close()
     return df
+# endregion
