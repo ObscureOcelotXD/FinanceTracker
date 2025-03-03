@@ -18,7 +18,7 @@ import logging
 import os
 import db_manager
 import plotly.express as px
-
+import alpha_api as av
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -52,6 +52,7 @@ configuration = Configuration(
 
 api_client = ApiClient(configuration)
 client = plaid_api.PlaidApi(api_client)
+# endregion
 
 @app.route('/')
 def index():
@@ -149,11 +150,22 @@ def create_flask_app():
         data = request.get_json()
         print("Received webhook:", data)
         return jsonify({"status": "received"}), 200
+    
+
+    app.register_blueprint(av.alpha_api)
 
     return app
 
-# endregion
 
+
+# #region Alpha Vantage
+# @app.route('/sp500', methods=['GET'])
+# def sp500():
+#     value = av.get_sp500_value()
+#     if value is None:
+#         return jsonify({"error": "Could not fetch S&P 500 data"}), 500
+#     return jsonify({"sp500": value})
+# # endregion
 
 if __name__ == '__main__':
     #app = create_flask_app() # uncomment to run app fron this file.

@@ -8,7 +8,12 @@
 <body>
     <button id="linkButton">Connect a bank account</button>
     <button onclick="window.location.href='/dashboard/'">View Metrics</button>
+    <div>
+        <h2>S&P 500: <span id="sp500-value">Loading...</span></h2>
+        <h2>BTC: <span id="btc-value">Loading...</span></h2>
+    </div>
     <script>
+        // Initialize Plaid Link
         document.getElementById('linkButton').onclick = function() {
             fetch('/create_link_token', { method: 'POST' })
                 .then(response => response.json())
@@ -49,6 +54,38 @@
                     console.error("🚨 Fetch Error:", error);
                 });
         };
+
+
+        // Fetch the S&P 500 value from the server
+        fetch('/sp500')
+        .then(response => response.json())
+        .then(data => {
+            if (data.sp500) {
+            document.getElementById('sp500-value').innerText = data.sp500;
+            } else {
+            document.getElementById('sp500-value').innerText = "Error fetching data";
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            document.getElementById('sp500-value').innerText = "Error fetching data";
+        });
+
+         // Fetch BTC value
+        fetch('/btc')
+        .then(response => response.json())
+        .then(data => {
+            if (data.btc) {
+            document.getElementById('btc-value').innerText = data.btc;
+            } else {
+            document.getElementById('btc-value').innerText = "Error fetching data";
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            document.getElementById('btc-value').innerText = "Error fetching data";
+        });
     </script>
+
 </body>
 </html>
