@@ -48,6 +48,9 @@ def create_flask_app():
     from api.coingecko_api import coingecko_api
     app.register_blueprint(coingecko_api)
 
+    from api.umbrel_api import umbrel_api
+    app.register_blueprint(umbrel_api)
+    
     # from api.binance_api import binance_api
     # app.register_blueprint(binance_api)
 

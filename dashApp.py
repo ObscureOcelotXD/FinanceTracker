@@ -13,11 +13,31 @@ dash_app = Dash(
     external_stylesheets=[dbc.themes.BOOTSTRAP]
 )
 
-# Define a minimal layout for the Dash app
+# Update the layout to use container cards for each graph
 dash_app.layout = html.Div([
-    html.H1("Finance Dashboard"),
-    dcc.Graph(id='sample-graph'),  # The graph will be updated via callbacks
-    dcc.Graph(id='pie-chart'),
-    dcc.Graph(id='line-graph'),   
+    html.H1("Finance Dashboard", style={"textAlign": "center", "marginBottom": "20px"}),
+    
+    # Container for the two side-by-side graphs (bar and pie charts)
+    html.Div([
+        html.Div(
+            dcc.Graph(id='sample-graph'),
+            className="card",
+            style={"display": "inline-block", "verticalAlign": "top", "width": "45%", "margin": "10px"}
+        ),
+        html.Div(
+            dcc.Graph(id='pie-chart'),
+            className="card",
+            style={"display": "inline-block", "verticalAlign": "top", "width": "45%", "margin": "10px"}
+        )
+    ], style={"textAlign": "center"}),
+    
+    # Full-width container for the line graph
+    html.Div(
+        dcc.Graph(id='line-graph'),
+        className="card",
+        style={"width": "90%", "margin": "20px auto"}
+    ),
+    
     dcc.Interval(id='interval-component', interval=60*1000, n_intervals=0)
 ])
+

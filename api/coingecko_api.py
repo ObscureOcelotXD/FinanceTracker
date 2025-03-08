@@ -1,16 +1,9 @@
 # api/coingecko_api.py
 from flask import Blueprint, jsonify, request
 import requests
-
+from api.coin_mapping import get_coin_id 
 coingecko_api = Blueprint('coingecko_api', __name__)
 
-# Mapping from common ticker symbols to CoinGecko IDs
-# COIN_MAPPING = {
-#     "BTC": "bitcoin",
-#     "ETH": "ethereum",
-#     "LTC": "litecoin",
-#     # add more mappings as needed...
-# }
 
 def get_coin_price(coin_id, vs_currency="usd"):
     """Call CoinGecko's simple price endpoint to get current price."""
@@ -31,7 +24,7 @@ def coingecko_quote():
         return jsonify({"error": "No ticker provided"}), 400
 
     # Map the provided ticker to a CoinGecko coin id
-    coin_id = ticker #COIN_MAPPING.get(ticker.upper())
+    coin_id = get_coin_id(ticker)
     if not coin_id:
         return jsonify({"error": f"Ticker '{ticker}' not recognized."}), 400
 

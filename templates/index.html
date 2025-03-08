@@ -68,6 +68,17 @@
           </div>
 
         </div>
+        <div class="container">
+          <div class="card" id="umbrelMetrics">
+            <h1>Umbrel Node Metrics</h1>
+            <div>
+              <h2>Block Count: <span id="blockcount">Loading...</span></h2>
+              <h2>Network Hash Rate: <span id="networkhashps">Loading...</span></h2>
+              <h2>Mempool Txns: <span id="mempoolinfo">Loading...</span></h2>
+              <h2>Fee Estimate (6 blocks): <span id="estimatesmartfee">Loading...</span></h2>
+            </div>
+          </div>
+        </div>
     </body>
 
 
@@ -116,95 +127,92 @@
         };
 </script>
 
-    <!-- <script>
-        
-
-
-        // Fetch the S&P 500 value from the server
-        fetch('/sp500')
-        .then(response => response.json())
-        .then(data => {
-            if (data.sp500) {
-            document.getElementById('sp500-value').innerText = data.sp500;
-            } else {
-            document.getElementById('sp500-value').innerText = "Error fetching data";
-            }
-        })
-        .catch(error => {
-            console.error("Error:", error);
-            document.getElementById('sp500-value').innerText = "Error fetching data";
-        });
-
-         // Fetch BTC value
-        fetch('/btc')
-        .then(response => response.json())
-        .then(data => {
-            if (data.btc) {
-            document.getElementById('btc-value').innerText = data.btc;
-            } else {
-            document.getElementById('btc-value').innerText = "Error fetching data";
-            }
-        })
-        .catch(error => {
-            console.error("Error:", error);
-            document.getElementById('btc-value').innerText = "Error fetching data";
-        });
-
-
-         // Ticker price fetch functionality
-    document.getElementById("fetchTickerBtn").addEventListener("click", function() {
-      const ticker = document.getElementById("tickerInput").value.trim();
-      if (!ticker) {
-        alert("Please enter a ticker symbol.");
-        return;
-      }
-      fetch('/ticker', {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker: ticker })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.price) {
-          document.getElementById("tickerPrice").innerText = data.price;
+<script>
+    // Fetch the S&P 500 value from the server
+    fetch('/sp500')
+    .then(response => response.json())
+    .then(data => {
+        if (data.sp500) {
+        document.getElementById('sp500-value').innerText = data.sp500;
         } else {
-          document.getElementById("tickerPrice").innerText = "Error fetching price";
-          console.error("Error:", data.error);
+        document.getElementById('sp500-value').innerText = "Error fetching data";
         }
-      })
-      .catch(error => {
-        console.error("Fetch error:", error);
+    })
+    .catch(error => {
+        console.error("Error:", error);
+        document.getElementById('sp500-value').innerText = "Error fetching data";
+    });
+
+    // Fetch BTC value
+    fetch('/btc')
+    .then(response => response.json())
+    .then(data => {
+        if (data.btc) {
+        document.getElementById('btc-value').innerText = data.btc;
+        } else {
+        document.getElementById('btc-value').innerText = "Error fetching data";
+        }
+    })
+    .catch(error => {
+        console.error("Error:", error);
+        document.getElementById('btc-value').innerText = "Error fetching data";
+    });
+
+
+    // Ticker price fetch functionality
+  document.getElementById("fetchTickerBtn").addEventListener("click", function() {
+    const ticker = document.getElementById("tickerInput").value.trim();
+    if (!ticker) {
+      alert("Please enter a ticker symbol.");
+      return;
+    }
+    fetch('/ticker', {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticker: ticker })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.price) {
+        document.getElementById("tickerPrice").innerText = data.price;
+      } else {
         document.getElementById("tickerPrice").innerText = "Error fetching price";
-      });
-    });
-
-
-        // Crypto price fetch functionality
-    document.getElementById("fetchCryptoBtn").addEventListener("click", function() {
-      const crypto = document.getElementById("cryptoInput").value.trim();
-      if (!crypto) {
-        alert("Please enter a crypto ticker symbol.");
-        return;
+        console.error("Error:", data.error);
       }
-      fetch('/crypto', {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker: crypto })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.price) {
-          document.getElementById("cryptoPrice").innerText = data.price;
-        } else {
-          document.getElementById("cryptoPrice").innerText = "Error fetching price";
-        }
-      })
-      .catch(error => {
-        console.error("Crypto fetch error:", error);
-        document.getElementById("cryptoPrice").innerText = "Error fetching price";
-      });
+    })
+    .catch(error => {
+      console.error("Fetch error:", error);
+      document.getElementById("tickerPrice").innerText = "Error fetching price";
     });
-    </script> -->
+  });
+
+
+      // Crypto price fetch functionality
+  document.getElementById("fetchCryptoBtn").addEventListener("click", function() {
+    const crypto = document.getElementById("cryptoInput").value.trim();
+    if (!crypto) {
+      alert("Please enter a crypto ticker symbol.");
+      return;
+    }
+    fetch('/crypto', {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticker: crypto })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.price) {
+        document.getElementById("cryptoPrice").innerText = data.price;
+      } else {
+        document.getElementById("cryptoPrice").innerText = "Error fetching price";
+      }
+    })
+    .catch(error => {
+      console.error("Crypto fetch error:", error);
+      document.getElementById("cryptoPrice").innerText = "Error fetching price";
+    });
+  });
+</script>
 
 <script>
     // Fetch Finnhub data from our endpoint and update the card
@@ -335,5 +343,65 @@ document.getElementById("geckoFetchCryptoBtn").addEventListener("click", functio
     //     document.getElementById("binanceCryptoPrice").innerText = "Error fetching data";
     //   });
     // });
+  </script>
+
+  <script>
+      // Fetch the current block count from the Umbrel node API endpoint
+  fetch('/umbrel/blockcount')
+    .then(response => response.json())
+    .then(data => {
+      if (data.block_count !== undefined) {
+        document.getElementById('blockcount').innerText = data.block_count;
+      } else {
+        document.getElementById('blockcount').innerText = "Error fetching data";
+        console.error("Error fetching Umbrel metrics:", data.error);
+      }
+    })
+    .catch(error => {
+      console.error("Error fetching Umbrel metrics:", error);
+      document.getElementById('blockcount').innerText = "Error fetching data";
+    });
+
+    // Fetch network hash rate
+    fetch('/umbrel/networkhashps')
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById('networkhashps').innerText = data.networkhashps || "Error";
+      })
+      .catch(error => {
+        console.error(error);
+        document.getElementById('networkhashps').innerText = "Error";
+      });
+
+    // Fetch mempool info (showing number of transactions in mempool)
+    fetch('/umbrel/mempoolinfo')
+      .then(response => response.json())
+      .then(data => {
+        if (data.mempoolinfo && data.mempoolinfo.size !== undefined) {
+          document.getElementById('mempoolinfo').innerText = data.mempoolinfo.size;
+        } else {
+          document.getElementById('mempoolinfo').innerText = "Error";
+        }
+      })
+      .catch(error => {
+        console.error(error);
+        document.getElementById('mempoolinfo').innerText = "Error";
+      });
+
+    // Fetch estimatesmartfee (showing fee rate)
+    fetch('/umbrel/estimatesmartfee')
+      .then(response => response.json())
+      .then(data => {
+        if (data.estimatesmartfee && data.estimatesmartfee.feerate !== undefined) {
+          document.getElementById('estimatesmartfee').innerText = data.estimatesmartfee.feerate;
+        } else {
+          document.getElementById('estimatesmartfee').innerText = "Error";
+        }
+      })
+      .catch(error => {
+        console.error(error);
+        document.getElementById('estimatesmartfee').innerText = "Error";
+      });
+
   </script>
 </html>
