@@ -43,20 +43,38 @@
             </div>
           </div>
           
-          <div class="card" id="FinnhubData">
-            <h1>Finnhub Data</h1>
+          <div class="card" id="FinnhubStockData">
+            <h1>Finnhub Stock Data</h1>
             <div>
               <h2>S&P 500 (SPY): <span id="finnhub-value">Loading...</span></h2>
             </div>
+            <hr>
+            <h2>Get Stock Price</h2>
+            <input type="text" id="finnTickerInput" placeholder="e.g., NVDA">
+            <button id="finnFetchTickerBtn">Get Price</button>
+            <p>Stock Price: <span id="finnTickerPrice">N/A</span></p>
           </div>
-        
+
+          <div class="card" id="coingeckoCryptoData">
+            <h1>Coin Gecko Crypto Data</h1>
+            <h2>BTC: <span id="coingecko-btc-value">Loading...</span></h2>
+            <hr>
+            <h2>Get Crypto Price</h2>
+            <input type="text" id="geckoCryptoInput" placeholder="e.g., ETH">
+            <button id="geckoFetchCryptoBtn">Get Crypto Price</button>
+            <p>Crypto Price: <span id="geckoCryptoPrice">N/A</span></p>
+            
+            
+          </div>
 
         </div>
     </body>
 
-    <!-- <script>
-        // Initialize Plaid Link
-        document.getElementById('linkButton').onclick = function() {
+
+<script>
+
+    // Initialize Plaid Link
+    document.getElementById('linkButton').onclick = function() {
             fetch('/create_link_token', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
@@ -96,6 +114,10 @@
                     console.error("🚨 Fetch Error:", error);
                 });
         };
+</script>
+
+    <!-- <script>
+        
 
 
         // Fetch the S&P 500 value from the server
@@ -199,5 +221,119 @@
         console.error("Finnhub fetch error:", error);
         document.getElementById('finnhub-value').innerText = "Error fetching data";
       });
+
+
+
+          // Stock price fetch
+    document.getElementById("finnFetchTickerBtn").addEventListener("click", function() {
+      const ticker = document.getElementById("finnTickerInput").value.trim();
+      if (!ticker) {
+        alert("Please enter a stock ticker symbol.");
+        return;
+      }
+      fetch('/stock', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker: ticker })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.price) {
+          document.getElementById("finnTickerPrice").innerText = data.price;
+        } else {
+          document.getElementById("finnTickerPrice").innerText = "Error fetching data";
+        }
+      })
+      .catch(error => {
+        console.error("Stock fetch error:", error);
+        document.getElementById("finnTickerPrice").innerText = "Error fetching data";
+      });
+    });
+
+
+fetch('/coingeckoBtc', {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({})  // No ticker needed since it's hardcoded to BTC
+})
+.then(response => response.json())
+.then(data => {
+    if (data.price) {
+        console.log("BTC Price:", data.price);
+        document.getElementById("coingecko-btc-value").innerText = data.price;
+    } else {
+        console.error("Error:", data.error);
+    }
+})
+.catch(error => console.error("Fetch error:", error));
+
+
+document.getElementById("geckoFetchCryptoBtn").addEventListener("click", function() {
+      const ticker = document.getElementById("geckoCryptoInput").value.trim();
+      if (!ticker) {
+        alert("Please enter a crypto ticker symbol.");
+        return;
+      }
+      fetch('/coingecko', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker: ticker })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.price) {
+          document.getElementById("geckoCryptoPrice").innerText = data.price;
+        } else {
+          document.getElementById("geckoCryptoPrice").innerText = "Error fetching data";
+          console.error("Crypto fetch error:", data.error);
+        }
+      })
+      .catch(error => {
+        console.error("Crypto fetch error:", error);
+        document.getElementById("geckoCryptoPrice").innerText = "Error fetching data";
+      });
+    });
+
+
+
+    // fetch('/binanceBtc')
+    //     .then(response => response.json())
+    //     .then(data => {
+    //         if (data.btc) {
+    //         document.getElementById('binance-btc-value').innerText = data.btc;
+    //         } else {
+    //         document.getElementById('binance-btc-value').innerText = "Error fetching data";
+    //         }
+    //     })
+    //     .catch(error => {
+    //         console.error("Error:", error);
+    //         document.getElementById('binance-btc-value').innerText = "Error fetching data";
+    //     });
+
+    // // Crypto price fetch
+    // document.getElementById("binanceFetchCryptoBtn").addEventListener("click", function() {
+    //   const ticker = document.getElementById("binanceCryptoInput").value.trim();
+    //   if (!ticker) {
+    //     alert("Please enter a crypto ticker symbol.");
+    //     return;
+    //   }
+    //   fetch('/binanceCrypto', {
+    //     method: "POST",
+    //     headers: { "Content-Type": "application/json" },
+    //     body: JSON.stringify({ ticker: ticker })
+    //   })
+    //   .then(response => response.json())
+    //   .then(data => {
+    //     if (data.price) {
+    //       document.getElementById("binanceCryptoPrice").innerText = data.price;
+    //     } else {
+    //       document.getElementById("binanceCryptoPrice").innerText = "Error fetching data";
+    //     }
+    //   })
+    //   .catch(error => {
+    //     console.error("Crypto fetch error:", error);
+    //     document.getElementById("binanceCryptoPrice").innerText = "Error fetching data";
+    //   });
+    // });
   </script>
 </html>
