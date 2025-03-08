@@ -31,7 +31,7 @@ def coingecko_quote():
         return jsonify({"error": "No ticker provided"}), 400
 
     # Map the provided ticker to a CoinGecko coin id
-    coin_id = ticker.upper() #COIN_MAPPING.get(ticker.upper())
+    coin_id = ticker #COIN_MAPPING.get(ticker.upper())
     if not coin_id:
         return jsonify({"error": f"Ticker '{ticker}' not recognized."}), 400
 
