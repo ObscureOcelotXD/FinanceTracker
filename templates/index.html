@@ -1,17 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Plaid Integration</title>
-    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-</head>
-<body>
-    <button id="linkButton">Connect a bank account</button>
-    <button onclick="window.location.href='/dashboard/'">View Metrics</button>
-    <div>
-        <h2>S&P 500: <span id="sp500-value">Loading...</span></h2>
-        <h2>BTC: <span id="btc-value">Loading...</span></h2>
-    </div>
+    <head>
+        <meta charset="UTF-8">
+        <title>Plaid Integration</title>
+        <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+        <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/index.css') }}">
+        
+    </head>
+    <body>
+        <div class="container">
+          <!-- First Card: Plaid Integration & Dashboard -->
+          <div class="card">
+            <h1>Plaid Integration</h1>
+            <p>Click the button below to connect a bank account:</p>
+            <button id="linkButton">Connect a bank account</button>
+            <hr>
+            <h1>Dashboard</h1>
+            <p>View your financial metrics:</p>
+            <button onclick="window.location.href='/dashboard/'">View Metrics</button>
+          </div>
+          
+          <!-- Second Card: Alpha Vantage Data -->
+          <div id="AlphaVantageData" class="card">
+            <h1>Alpha Vantage Data</h1>
+            <div>
+              <h2>S&P 500: <span id="sp500-value">Loading...</span></h2>
+              <h2>BTC: <span id="btc-value">Loading...</span></h2>
+            </div>
+            <hr>
+            <div>
+              <h2>Get Stock Price</h2>
+              <input type="text" id="tickerInput" placeholder="e.g., NVDA">
+              <button id="fetchTickerBtn">Get Price</button>
+              <p>Price: <span id="tickerPrice">N/A</span></p>
+            </div>
+            <hr>
+            <div>
+              <h2>Get Crypto Price</h2>
+              <input type="text" id="cryptoInput" placeholder="Enter crypto ticker (e.g., ETH)">
+              <button id="fetchCryptoBtn">Get Crypto Price</button>
+              <p>Crypto Price: <span id="cryptoPrice">N/A</span></p>
+            </div>
+          </div>
+        </div>
+    </body>
+
     <script>
         // Initialize Plaid Link
         document.getElementById('linkButton').onclick = function() {
@@ -85,7 +118,60 @@
             console.error("Error:", error);
             document.getElementById('btc-value').innerText = "Error fetching data";
         });
-    </script>
 
-</body>
+
+         // Ticker price fetch functionality
+    document.getElementById("fetchTickerBtn").addEventListener("click", function() {
+      const ticker = document.getElementById("tickerInput").value.trim();
+      if (!ticker) {
+        alert("Please enter a ticker symbol.");
+        return;
+      }
+      fetch('/ticker', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker: ticker })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.price) {
+          document.getElementById("tickerPrice").innerText = data.price;
+        } else {
+          document.getElementById("tickerPrice").innerText = "Error fetching price";
+          console.error("Error:", data.error);
+        }
+      })
+      .catch(error => {
+        console.error("Fetch error:", error);
+        document.getElementById("tickerPrice").innerText = "Error fetching price";
+      });
+    });
+
+
+        // Crypto price fetch functionality
+    document.getElementById("fetchCryptoBtn").addEventListener("click", function() {
+      const crypto = document.getElementById("cryptoInput").value.trim();
+      if (!crypto) {
+        alert("Please enter a crypto ticker symbol.");
+        return;
+      }
+      fetch('/crypto', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker: crypto })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.price) {
+          document.getElementById("cryptoPrice").innerText = data.price;
+        } else {
+          document.getElementById("cryptoPrice").innerText = "Error fetching price";
+        }
+      })
+      .catch(error => {
+        console.error("Crypto fetch error:", error);
+        document.getElementById("cryptoPrice").innerText = "Error fetching price";
+      });
+    });
+    </script>
 </html>
