@@ -42,10 +42,19 @@
               <p>Crypto Price: <span id="cryptoPrice">N/A</span></p>
             </div>
           </div>
+          
+          <div class="card" id="FinnhubData">
+            <h1>Finnhub Data</h1>
+            <div>
+              <h2>S&P 500 (SPY): <span id="finnhub-value">Loading...</span></h2>
+            </div>
+          </div>
+        
+
         </div>
     </body>
 
-    <script>
+    <!-- <script>
         // Initialize Plaid Link
         document.getElementById('linkButton').onclick = function() {
             fetch('/create_link_token', { method: 'POST' })
@@ -173,5 +182,22 @@
         document.getElementById("cryptoPrice").innerText = "Error fetching price";
       });
     });
-    </script>
+    </script> -->
+
+<script>
+    // Fetch Finnhub data from our endpoint and update the card
+    fetch('/finnhub')
+      .then(response => response.json())
+      .then(data => {
+        if(data.price){
+          document.getElementById('finnhub-value').innerText = data.price;
+        } else {
+          document.getElementById('finnhub-value').innerText = "Error fetching data";
+        }
+      })
+      .catch(error => {
+        console.error("Finnhub fetch error:", error);
+        document.getElementById('finnhub-value').innerText = "Error fetching data";
+      });
+  </script>
 </html>

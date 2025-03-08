@@ -19,6 +19,7 @@ import os
 import db_manager
 import plotly.express as px
 import alpha_api as av
+# import finnhub_api as finn
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -26,7 +27,6 @@ load_dotenv()
 
 app = Flask(__name__)
 app.config["DEBUG"] = True
-
 #region Plaid API Configuration
 
 # Convert PLAID_ENV string to the correct Plaid Environment object
@@ -154,18 +154,12 @@ def create_flask_app():
 
     app.register_blueprint(av.alpha_api)
 
+    from finnhub_api import finnhub_api
+    app.register_blueprint(finnhub_api)
+
+    # app.register_blueprint(finn.finnhub_api)
+
     return app
-
-
-
-# #region Alpha Vantage
-# @app.route('/sp500', methods=['GET'])
-# def sp500():
-#     value = av.get_sp500_value()
-#     if value is None:
-#         return jsonify({"error": "Could not fetch S&P 500 data"}), 500
-#     return jsonify({"sp500": value})
-# # endregion
 
 if __name__ == '__main__':
     #app = create_flask_app() # uncomment to run app fron this file.
