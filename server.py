@@ -50,6 +50,12 @@ def create_flask_app():
 
     from api.umbrel_api import umbrel_api
     app.register_blueprint(umbrel_api)
+
+    # from api.nownodes_api import nownodes_api
+    # app.register_blueprint(nownodes_api)
+
+    from api.umbrel_lightning_api import umbrel_lightning_api
+    app.register_blueprint(umbrel_lightning_api)
     
     # from api.binance_api import binance_api
     # app.register_blueprint(binance_api)

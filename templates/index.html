@@ -78,6 +78,23 @@
               <h2>Fee Estimate (6 blocks): <span id="estimatesmartfee">Loading...</span></h2>
             </div>
           </div>
+
+          <div class="card" id="umbrelLightningMetrics">
+            <h1>Umbrel Lightning Metrics</h1>
+            <div>
+              <h2>Node Alias: <span id="lightningAlias">Loading...</span></h2>
+              <h2>Block Height: <span id="lightningBlockHeight">Loading...</span></h2>
+              <h2>Active Channels: <span id="lightningChannels">Loading...</span></h2>
+            </div>
+          </div>
+
+          <!-- <div class="card" id="nownodesCard">
+            <h1>NOWNODES ETH Metrics</h1>
+            <div>
+              <h2>Current Block Number: <span id="ethBlockNumber">Loading...</span></h2>
+            </div>
+          </div> -->
+
         </div>
     </body>
 
@@ -403,5 +420,45 @@ document.getElementById("geckoFetchCryptoBtn").addEventListener("click", functio
         document.getElementById('estimatesmartfee').innerText = "Error";
       });
 
+
+    // Fetch Lightning info from the Umbrel node
+    fetch('/umbrel/lightning/getinfo')
+      .then(response => response.json())
+      .then(data => {
+          if (data.error) {
+              document.getElementById('lightningAlias').innerText = "Error";
+              document.getElementById('lightningBlockHeight').innerText = "Error";
+              document.getElementById('lightningChannels').innerText = "Error";
+              console.error("Error fetching Lightning metrics:", data.error);
+          } else {
+              // For LND getinfo, common fields include 'alias', 'block_height', and sometimes 'num_active_channels'
+              document.getElementById('lightningAlias').innerText = data.alias || "N/A";
+              document.getElementById('lightningBlockHeight').innerText = data.block_height || "N/A";
+              document.getElementById('lightningChannels').innerText = data.num_active_channels || "N/A";
+          }
+      })
+      .catch(error => {
+          console.error("Error fetching Lightning metrics:", error);
+          document.getElementById('lightningAlias').innerText = "Error";
+          document.getElementById('lightningBlockHeight').innerText = "Error";
+          document.getElementById('lightningChannels').innerText = "Error";
+    });
+  </script>
+
+  <script>
+    // fetch('/nownodes/eth_blocknumber')
+    //   .then(response => response.json())
+    //   .then(data => {
+    //       if (data.block_number !== undefined) {
+    //           document.getElementById('ethBlockNumber').innerText = data.block_number;
+    //       } else {
+    //           document.getElementById('ethBlockNumber').innerText = "Error fetching data";
+    //           console.error("Error fetching NOWNODES metrics:", data.error);
+    //       }
+    //   })
+    //   .catch(error => {
+    //       console.error("Error fetching NOWNODES metrics:", error);
+    //       document.getElementById('ethBlockNumber').innerText = "Error fetching data";
+    //   });
   </script>
 </html>
