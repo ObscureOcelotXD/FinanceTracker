@@ -17,13 +17,10 @@ from handlers.edit_handler import handle_value_edit
 from handlers.delete_handler import delete_selected_row
 from runServer import flask_app
 import db_manager
-# import dashPages.dashApp as dashApp
 
-# import dashPages.stocks_dash as stocksDash
-# import dashPages.stocks_manage as stocksManage
 # print(flask_app.url_map)
 
-CSV_FILENAME = "finance_data.csv"
+
 
 # region PySide6 UI Code
 class MainWindow(QMainWindow):
@@ -45,7 +42,7 @@ class MainWindow(QMainWindow):
 
         # ✅ Connect "Add Source" button to a single method for UI & CSV
         # Connect functions:
-        self.ui.addSource.clicked.connect(self.handle_add_source)
+        # self.ui.addSource.clicked.connect(self.handle_add_source)
         self.ui.sourceTable.itemChanged.connect(lambda item: handle_value_edit(self, item))
         self.ui.deleteRowButton.clicked.connect(lambda: delete_selected_row(self.ui))
 
@@ -212,20 +209,20 @@ class MainWindow(QMainWindow):
 
 
 
-    def get_next_id(self):  
-            """Finds the next available Id by reading the CSV."""
-            if not os.path.exists(CSV_FILENAME):
-                return 1  # Start at 1 if file doesn't exist
+    # def get_next_id(self):  
+    #         """Finds the next available Id by reading the CSV."""
+    #         if not os.path.exists(CSV_FILENAME):
+    #             return 1  # Start at 1 if file doesn't exist
 
-            with open(CSV_FILENAME, "r", newline="") as file:
-                reader = csv.reader(file)
-                next(reader, None)  # Skip headers
-                ids = [int(row[0]) for row in reader if row[0].isdigit()]
-                return max(ids, default=0) + 1  # Get next available Id
+    #         with open(CSV_FILENAME, "r", newline="") as file:
+    #             reader = csv.reader(file)
+    #             next(reader, None)  # Skip headers
+    #             ids = [int(row[0]) for row in reader if row[0].isdigit()]
+    #             return max(ids, default=0) + 1  # Get next available Id
             
-    def handle_add_source(self):
-        """Handles calling add_source with the correct Id"""
-        add_source(self.ui, self.get_next_id())
+    # def handle_add_source(self):
+    #     """Handles calling add_source with the correct Id"""
+    #     add_source(self.ui, self.get_next_id())
 
     def reset_to_initial_state(self):
         """Resets the table to its initial state by reloading from CSV and populating group totals."""
@@ -255,6 +252,10 @@ if __name__ == '__main__':
     window = MainWindow()
     window.show()
 
+    # Update stock prices needs to run here so db has time to initialize.
+    import api.alpha_api as av
+    av.update_stock_prices()
+    
     # Run the application event loop
     try:
         exit_code = app.exec()

@@ -56,6 +56,25 @@ def init_db():
         )
     """)
 
+    cur5 = con.cursor()
+    cur5.execute("""
+        CREATE TABLE IF NOT EXISTS stock_prices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            date TEXT NOT NULL,
+            closing_price REAL NOT NULL
+        )
+    """)
+
+
+    cur6 = con.cursor()
+    cur6.execute("""
+        CREATE TABLE IF NOT EXISTS price_update_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            last_run_date TEXT NOT NULL
+        )
+    """)
+
     con.commit()
     con.close()
 
@@ -248,4 +267,66 @@ def delete_stock(stock_id):
     cur.execute("DELETE FROM Stocks WHERE id = ?", (stock_id,))
     conn.commit()
     conn.close()
+
+
+def get_all_tickers():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT ticker FROM Stocks")
+    rows = cursor.fetchall()
+    conn.close()
+    # Return a list of ticker strings
+    return [row[0] for row in rows]
+
+def insert_stock_price(ticker, date, closing_price):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO stock_prices (ticker, date, closing_price)
+        VALUES (?, ?, ?)
+    """, (ticker, date, closing_price))
+    conn.commit()
+    conn.close()
+
+def get_last_update():
+    """
+    Retrieves the last_run_date from price_update_log.
+    Returns the date as a string in ISO format (YYYY-MM-DD) or None if not set.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # # Check if the price_update_log table exists
+    # cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='price_update_log'")
+    # if cursor.fetchone() is None:
+    #     conn.close()
+    #     return None
+
+    cursor.execute("SELECT last_run_date FROM price_update_log ORDER BY id DESC LIMIT 1")
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+def set_last_update(date_str):
+    """
+    Sets or updates the last_run_date in the price_update_log table.
+    If a record exists, updates it; otherwise, inserts a new record.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    # Check if there's already a record in price_update_log
+    cursor.execute("SELECT id FROM price_update_log LIMIT 1")
+    row = cursor.fetchone()
+    
+    if row:
+        # Update the existing record
+        cursor.execute("UPDATE price_update_log SET last_run_date = ? WHERE id = ?", (date_str, row[0]))
+    else:
+        # Insert a new record
+        cursor.execute("INSERT INTO price_update_log (last_run_date) VALUES (?)", (date_str,))
+    
+    conn.commit()
+    conn.close()
+
 #endregion

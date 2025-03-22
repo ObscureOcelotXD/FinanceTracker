@@ -1,14 +1,16 @@
 from flask import Blueprint, jsonify,request
 import os
 import requests
+import datetime
+from db_manager import get_all_tickers, insert_stock_price, set_last_update,get_last_update
 
 alpha_api = Blueprint('alpha_api', __name__)
 
 ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
-
+ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
 def get_sp500_value():
     # Example: Use Alpha Vantage GLOBAL_QUOTE endpoint for S&P 500
-    url = "https://www.alphavantage.co/query"
+    url = ALPHA_VANTAGE_URL
     params = {
         "function": "GLOBAL_QUOTE",
         "symbol": "SPY",  # Check documentation for the correct symbol
@@ -35,7 +37,7 @@ def sp500():
 
 
 def get_btc_value():
-    url = "https://www.alphavantage.co/query"
+    url = ALPHA_VANTAGE_URL
     params = {
         "function": "DIGITAL_CURRENCY_DAILY",
         "symbol": "BTC",
@@ -69,7 +71,7 @@ def btc():
 
 
 def get_stock_price(ticker):
-    url = "https://www.alphavantage.co/query"
+    url = ALPHA_VANTAGE_URL
     params = {
         "function": "GLOBAL_QUOTE",
         "symbol": ticker,
@@ -100,8 +102,7 @@ def ticker_price():
 
 
 def get_crypto_price(ticker):
-    url = "https://www.alphavantage.co/query"
-
+    url = ALPHA_VANTAGE_URL
     params = {
         "function": "DIGITAL_CURRENCY_DAILY",
         "symbol": ticker.upper(),  # Ensure ticker is uppercase
@@ -131,3 +132,45 @@ def crypto_price():
     if price is None:
         return jsonify({"error": "Ticker not found or API error"}), 500
     return jsonify({"ticker": ticker.upper(), "price": price})
+
+
+
+#region stock management
+
+def fetch_stock_price(ticker):
+    """Fetch the current closing price for the given ticker using Alpha Vantage."""
+    params = {
+        "function": "GLOBAL_QUOTE",  # Using the GLOBAL_QUOTE endpoint
+        "symbol": ticker,
+        "apikey": ALPHA_VANTAGE_API_KEY
+    }
+    response = requests.get(ALPHA_VANTAGE_URL, params=params)
+    data = response.json()
+    try:
+        # Parse the JSON to extract the price (often under "05. price")
+        closing_price = float(data["Global Quote"]["05. price"])
+        return closing_price
+    except (KeyError, ValueError) as e:
+        print(f"Error fetching price for {ticker}: {e} - Response: {data}")
+        return None
+
+def update_stock_prices():
+    """Fetches tickers from Stocks table, retrieves the latest price, and inserts into stock_prices."""
+    # Get all ticker symbols from the Stocks table via db_manager
+    tickers = get_all_tickers()
+    today = datetime.date.today().isoformat()
+    last_run = get_last_update()  # Your function to query the flag
+
+    if last_run == today:
+        print("Update already performed today. Skipping update.")
+        return
+    
+    for ticker in tickers:
+        price = fetch_stock_price(ticker)
+        if price is not None:
+            insert_stock_price(ticker, today, price)
+            print(f"Inserted price for {ticker}: {price}")
+        else:
+            print(f"Skipping {ticker} due to error in fetching price.")
+    set_last_update(today)
+#end region

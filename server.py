@@ -59,9 +59,9 @@ def create_flask_app():
     
     # from api.binance_api import binance_api
     # app.register_blueprint(binance_api)
-
     return app
 
 if __name__ == '__main__':
     #app = create_flask_app() # uncomment to run app fron this file.
+    # av.update_stock_prices()
     app.run(host="0.0.0.0", port=5000, debug=True)
