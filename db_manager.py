@@ -46,6 +46,16 @@ def init_db():
             category TEXT
         )
     """)
+
+    cur4 = con.cursor()
+    cur4.execute("""
+        CREATE TABLE IF NOT EXISTS Stocks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            shares REAL NOT NULL
+        )
+    """)
+
     con.commit()
     con.close()
 
@@ -196,3 +206,46 @@ def get_all_records_df():
     con.close()
     return df
 # endregion
+
+
+#region Stock Data
+def get_stocks():
+    conn = get_connection()
+    query = "SELECT id,ticker,shares FROM Stocks"
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    return df
+
+def insert_stock(ticker, shares):
+    """
+    Insert a new stock record into the Stocks table.
+    Returns the new stock's id.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO Stocks (ticker, shares) VALUES (?, ?)", (ticker, shares))
+    conn.commit()
+    stock_id = cur.lastrowid
+    conn.close()
+    return stock_id
+
+def update_stock(stock_id, ticker, shares):
+    """
+    Update an existing stock record with the given id.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE Stocks SET ticker = ?, shares = ? WHERE id = ?", (ticker, shares, stock_id))
+    conn.commit()
+    conn.close()
+
+def delete_stock(stock_id):
+    """
+    Delete the stock record with the given id from the Stocks table.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM Stocks WHERE id = ?", (stock_id,))
+    conn.commit()
+    conn.close()
+#endregion

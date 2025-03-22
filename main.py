@@ -17,9 +17,11 @@ from handlers.edit_handler import handle_value_edit
 from handlers.delete_handler import delete_selected_row
 from runServer import flask_app
 import db_manager
-import dashApp
-import dash_callbacks
-print(flask_app.url_map)
+# import dashPages.dashApp as dashApp
+
+# import dashPages.stocks_dash as stocksDash
+# import dashPages.stocks_manage as stocksManage
+# print(flask_app.url_map)
 
 CSV_FILENAME = "finance_data.csv"
 
@@ -246,7 +248,8 @@ if __name__ == '__main__':
     # Start Flask server in a separate thread
     flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
-
+    import dashApp as dashApp
+    import dash_callbacks
     # Start the Qt application
     app = QApplication(sys.argv)
     window = MainWindow()

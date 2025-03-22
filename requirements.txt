@@ -11,7 +11,7 @@ pytz==2025.1
 shiboken6==6.8.2.1
 six==1.17.0
 tzdata==2025.1
-dash==2.18.2
+dash==3.0.0
 dash-bootstrap-components==1.0.0
 requests==2.32.3
 dotenv==0.9.9
