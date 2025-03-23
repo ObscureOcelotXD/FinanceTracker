@@ -137,22 +137,52 @@ def crypto_price():
 
 #region stock management
 
-def fetch_stock_price(ticker):
-    """Fetch the current closing price for the given ticker using Alpha Vantage."""
+# def fetch_stock_price(ticker):
+#     """Fetch the current closing price for the given ticker using Alpha Vantage."""
+#     params = {
+#         "function": "GLOBAL_QUOTE",  # Using the GLOBAL_QUOTE endpoint
+#         "symbol": ticker,
+#         "apikey": ALPHA_VANTAGE_API_KEY
+#     }
+#     response = requests.get(ALPHA_VANTAGE_URL, params=params)
+#     data = response.json()
+#     try:
+#         # Parse the JSON to extract the price (often under "05. price")
+#         closing_price = float(data["Global Quote"]["05. price"])
+#         return closing_price
+#     except (KeyError, ValueError) as e:
+#         print(f"Error fetching price for {ticker}: {e} - Response: {data}")
+#         return None
+
+
+def fetch_stock_prices_batch(tickers):
+    """
+    Fetch closing prices for multiple tickers in a single API call.
+    Returns a dictionary mapping each ticker to its closing price.
+    """
+    if not tickers:
+        return {}
+
+    symbols = ",".join(tickers)
     params = {
-        "function": "GLOBAL_QUOTE",  # Using the GLOBAL_QUOTE endpoint
-        "symbol": ticker,
+        "function": "BATCH_STOCK_QUOTES",
+        "symbols": symbols,
         "apikey": ALPHA_VANTAGE_API_KEY
     }
     response = requests.get(ALPHA_VANTAGE_URL, params=params)
     data = response.json()
+    
+    batch_prices = {}
     try:
-        # Parse the JSON to extract the price (often under "05. price")
-        closing_price = float(data["Global Quote"]["05. price"])
-        return closing_price
-    except (KeyError, ValueError) as e:
-        print(f"Error fetching price for {ticker}: {e} - Response: {data}")
-        return None
+        # Parse the response assuming the key "Stock Quotes" contains the data.
+        quotes = data["Stock Quotes"]
+        for quote in quotes:
+            ticker = quote["1. symbol"]
+            price = float(quote["2. price"])
+            batch_prices[ticker] = price
+    except Exception as e:
+        print(f"Error fetching batch prices: {e}. Response: {data}")
+    return batch_prices
 
 def update_stock_prices():
     """Fetches tickers from Stocks table, retrieves the latest price, and inserts into stock_prices."""
@@ -165,8 +195,11 @@ def update_stock_prices():
         print("Update already performed today. Skipping update.")
         return
     
+    batch_prices = fetch_stock_prices_batch(tickers)
+    
     for ticker in tickers:
-        price = fetch_stock_price(ticker)
+        # price = fetch_stock_price(ticker)
+        price = batch_prices.get(ticker)
         if price is not None:
             insert_stock_price(ticker, today, price)
             print(f"Inserted price for {ticker}: {price}")

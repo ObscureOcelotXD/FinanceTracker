@@ -235,6 +235,25 @@ def get_stocks():
     conn.close()
     return df
 
+def get_value_stocks():
+    conn = get_connection()
+    # activeStocks = "SELECT id,ticker,shares FROM Stocks"
+    # activeStocksList = pd.read_sql_query(activeStocks, conn)
+
+    # getStockPrices = "SELECT ticker, date, closing_price FROM stock_prices"
+    # stockPricesList = pd.read_sql_query(getStockPrices, conn)
+
+    query = """
+        SELECT s.id, s.ticker, s.shares, sp.date, sp.closing_price
+        FROM Stocks s
+        JOIN stock_prices sp ON s.ticker = sp.ticker
+        where sp.date = (select max(date) from stock_prices)
+        """
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    df['position_value'] = df['shares'] * df['closing_price']
+    return df
+
 def insert_stock(ticker, shares):
     """
     Insert a new stock record into the Stocks table.
