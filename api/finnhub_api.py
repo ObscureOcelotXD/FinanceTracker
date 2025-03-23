@@ -2,13 +2,17 @@
 from flask import Blueprint, jsonify, request
 import os
 import requests
+import concurrent.futures
+import datetime
+from db_manager import get_all_tickers, insert_stock_price
 
 finnhub_api = Blueprint('finnhub_api', __name__)
 
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")  # Make sure this is set in your environment
+FINNHUB_QUOTE_URL = "https://finnhub.io/api/v1/quote"
 
 def get_stock_quote(symbol):
-    url = "https://finnhub.io/api/v1/quote"
+    url = FINNHUB_QUOTE_URL
     params = {"symbol": symbol, "token": FINNHUB_API_KEY}
     response = requests.get(url, params=params)
     print("Request URL:", response.request.url)
@@ -30,7 +34,7 @@ def finnhub_quote():
 
 def get_stock_quote(symbol):
     """Call Finnhub's stock quote endpoint."""
-    url = "https://finnhub.io/api/v1/quote"
+    url = FINNHUB_QUOTE_URL
     params = {
         "symbol": symbol,
         "token": FINNHUB_API_KEY
@@ -84,3 +88,55 @@ def stock_quote():
 #         return jsonify({"ticker": symbol, "price": quote["c"]})
 #     else:
 #         return jsonify({"error": "Data not found or API error"}), 500
+
+
+
+def fetch_finnhub_quote(ticker):
+    """
+    Calls Finnhub's /quote endpoint for a single ticker and returns a tuple (ticker, current_price).
+    The Finnhub quote returns a JSON object with key "c" for the current price.
+    """
+    params = {
+        "symbol": ticker,
+        "token": FINNHUB_API_KEY
+    }
+    response = requests.get(FINNHUB_QUOTE_URL, params=params)
+    data = response.json()
+    try:
+        current_price = data.get("c")
+        if current_price is None:
+            raise ValueError("Missing 'c' value")
+        return ticker, float(current_price)
+    except (KeyError, ValueError) as e:
+        print(f"Error fetching price for {ticker}: {e} - Response: {data}")
+        return ticker, None
+
+def fetch_stock_prices_batch(tickers):
+    """
+    Fetches Finnhub quotes for a list of tickers concurrently.
+    Returns a dictionary mapping ticker -> current_price.
+    """
+    batch_prices = {}
+    # Using a thread pool to perform requests concurrently
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        # Submit a task for each ticker.
+        future_to_ticker = {executor.submit(fetch_finnhub_quote, ticker): ticker for ticker in tickers}
+        for future in concurrent.futures.as_completed(future_to_ticker):
+            ticker, price = future.result()
+            batch_prices[ticker] = price
+    return batch_prices
+
+def update_stock_prices():
+    tickers = get_all_tickers()  # e.g., returns a list like ["AAPL", "MSFT", "GOOG", ...]
+    today = datetime.date.today().isoformat()
+
+    # Fetch prices concurrently using Finnhub
+    batch_prices = fetch_stock_prices_batch(tickers)
+    
+    for ticker in tickers:
+        price = batch_prices.get(ticker)
+        if price is not None:
+            insert_stock_price(ticker, today, price)
+            print(f"Inserted price for {ticker}: {price}")
+        else:
+            print(f"Price for {ticker} not available.")
