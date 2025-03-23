@@ -20,8 +20,6 @@ import db_manager
 
 # print(flask_app.url_map)
 
-
-
 # region PySide6 UI Code
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -207,30 +205,9 @@ class MainWindow(QMainWindow):
         self.sort_ascending = not self.sort_ascending
 
 
-
-
-    # def get_next_id(self):  
-    #         """Finds the next available Id by reading the CSV."""
-    #         if not os.path.exists(CSV_FILENAME):
-    #             return 1  # Start at 1 if file doesn't exist
-
-    #         with open(CSV_FILENAME, "r", newline="") as file:
-    #             reader = csv.reader(file)
-    #             next(reader, None)  # Skip headers
-    #             ids = [int(row[0]) for row in reader if row[0].isdigit()]
-    #             return max(ids, default=0) + 1  # Get next available Id
-            
-    # def handle_add_source(self):
-    #     """Handles calling add_source with the correct Id"""
-    #     add_source(self.ui, self.get_next_id())
-
     def reset_to_initial_state(self):
         """Resets the table to its initial state by reloading from CSV and populating group totals."""
         
-        # Reload data from CSV file.
-        #self.load_from_db()
-        
-        # Populate table with group totals again.
         self.populate_table_with_group_totals()
 # endregion
 
