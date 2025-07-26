@@ -1,73 +1,71 @@
 import dash
-from dash import html, dcc, dash_table
+from dash import html, dcc, dash_table, ctx
 import dash_bootstrap_components as dbc
 import db_manager
+from dash.dependencies import Output, Input, State
+from dash.exceptions import PreventUpdate
 
-# Register this page for managing stocks.
 dash.register_page(
     __name__,
     path="/stocks_manage",
     name="Manage Stocks",
     layout=dbc.Container([
+        dbc.Row(dbc.Col(html.H1("Manage Stocks", className="text-center mb-4"), width=12)),
+
+        # Add / update new stock
         dbc.Row(
             dbc.Col(
-                html.H1("Manage Stocks", className="text-center mb-4"),
-                width=12
-            )
-        ),
-        dbc.Row([
-            dbc.Col(
                 dbc.Card([
-                    dbc.CardHeader(html.H4("Add / Edit Stock", className="card-title")),
+                    dbc.CardHeader(html.H4("Add Stock")),
                     dbc.CardBody([
                         dbc.Row([
-                            dbc.Col(
-                                dcc.Input(
-                                    id="ticker-input", type="text", placeholder="Ticker (e.g., NVDA)",
-                                    className="form-control", style={"marginBottom": "10px"}
-                                ),
-                                width=4
-                            ),
-                            dbc.Col(
-                                dcc.Input(
-                                    id="shares-input", type="number", placeholder="Shares", min=0, step="any",
-                                    className="form-control", style={"marginBottom": "10px"}
-                                ),
-                                width=4
-                            ),
-                            dbc.Col(
-                                html.Button("Add/Update", id="add-stock-button", n_clicks=0,
-                                            className="btn btn-primary btn-block"),
-                                width=4
-                            )
+                            dbc.Col(dcc.Input(id="ticker-input", type="text",
+                                              placeholder="Ticker (e.g. NVDA)",
+                                              className="form-control mb-2"), width=4),
+                            dbc.Col(dcc.Input(id="shares-input", type="number",
+                                              placeholder="Shares", min=0, step=1,
+                                              className="form-control mb-2"), width=4),
+                            dbc.Col(dbc.Button("Add / Update", id="add-stock-button",
+                                               color="primary", className="w-100 mb-2"), width=4),
                         ]),
-                        html.Div(id="form-output", className="mt-2 text-success")
+                        html.Div(id="form-output", className="text-success")
                     ])
                 ], className="mb-4"),
                 width={"size": 8, "offset": 2}
             )
-        ]),
+        ),
+
+        # Stocks table & edit row UI
         dbc.Row(
             dbc.Col(
                 dbc.Card([
-                    dbc.CardHeader(html.H4("Stocks List", className="card-title")),
-                    dbc.CardBody(
+                    dbc.CardHeader(html.H4("Stocks")),
+                    dbc.CardBody([
                         dash_table.DataTable(
                             id='stocks-table',
+                            row_deletable=True,
+                            row_selectable='single',
                             columns=[
-                                {"name": "ID", "id": "id", "hideable": True, "hidden": True},
+                                {"name": "ID", "id": "id", "hidden": True},
                                 {"name": "Ticker", "id": "ticker"},
-                                {"name": "Shares", "id": "shares"},
-                                {"name": "Actions", "id": "actions", "presentation": "markdown"}
+                                {"name": "Shares", "id": "shares", "type": "numeric"}
                             ],
                             data=[],
                             style_table={'overflowX': 'auto'},
                             style_cell={'textAlign': 'center'},
                             page_action="none",
                             style_header={'backgroundColor': '#f4f4f4', 'fontWeight': 'bold'},
-                            markdown_options={"html": True},
-                        )
-                    )
+                        ),
+                        html.Br(),
+                        dbc.Row([
+                            dbc.Col(dcc.Input(id='edit-shares-input', type='number',
+                                              placeholder='New shares', min=0, step=1,
+                                              className='form-control'), width=4),
+                            dbc.Col(dbc.Button('Update Selected Row', id='update-shares-btn',
+                                               color='warning', className='mb-2'), width='auto'),
+                        ], justify='start'),
+                        html.Div(id='edit-feedback', className='mt-2 text-warning')
+                    ])
                 ], className="mb-4"),
                 width={"size": 8, "offset": 2}
             )
@@ -75,65 +73,90 @@ dash.register_page(
     ], fluid=True)
 )
 
-# Callback for loading the stocks table data.
+# Reload table whenever store changes or periodic interval (if using interval)
 @dash.callback(
-    dash.dependencies.Output('stocks-table', 'data'),
-    [dash.dependencies.Input('interval-component', 'n_intervals'),
-     dash.dependencies.Input('stocks-store', 'data')]
+    Output('stocks-table', 'data'),
+    [Input('stocks-store', 'data')],
+    prevent_initial_call=False
 )
-def load_stocks_table(n_intervals, store_data):
+def load_stocks_table(store_data):
     df = db_manager.get_stocks()
-    if df.empty:
-        return []
-    data = df.to_dict("records")
-    for record in data:
-        # Use Bootstrap classes for a nicely styled delete button.
-        record["actions"] = f'<button class="btn btn-danger btn-sm" data-id="{record["id"]}">Delete</button>'
-    return data
+    return df.to_dict('records') if not df.empty else []
 
-# Callback for adding/updating a stock.
+# Add or update new stock
 @dash.callback(
-    [dash.dependencies.Output("form-output", "children"), dash.dependencies.Output("stocks-store", "data")],
-    [dash.dependencies.Input("add-stock-button", "n_clicks")],
-    [dash.dependencies.State("ticker-input", "value"), 
-     dash.dependencies.State("shares-input", "value"), 
-     dash.dependencies.State("stocks-store", "data")]
+    [Output("form-output", "children"),
+     Output("stocks-store", "data")],
+    Input("add-stock-button", "n_clicks"),
+    [State("ticker-input", "value"),
+     State("shares-input", "value"),
+     State("stocks-store", "data")]
 )
-def add_update_stock(n_clicks, ticker, shares, store_data):
-    if n_clicks:
-        if not ticker or shares is None:
-            return "Please enter both ticker and shares.", store_data
-        ticker = ticker.upper().strip()
+def add_stock(n_clicks, ticker, shares, store_data):
+    if not n_clicks:
+        raise PreventUpdate
+    if not ticker or shares is None:
+        return "Enter both ticker and shares.", dash.no_update
+    ticker = ticker.upper().strip()
+    try:
+        df = db_manager.get_stocks()
+        db_manager.insert_stock(ticker, shares)
+        msg = f"Added {ticker} → {shares} shares."
+        return msg, (store_data or 0) + 1
+    except Exception as e:
+        return f"Error: {e}", dash.no_update
+
+# Single callback to sync deletion, edit button, and in-table edits (if any)
+@dash.callback(
+    [Output('stocks-store', 'data', allow_duplicate=True),
+     Output('edit-feedback', 'children')],
+    [Input('stocks-table', 'data_previous'),
+     Input('update-shares-btn', 'n_clicks')],
+    [State('stocks-table', 'data'),
+     State('stocks-table', 'selected_rows'),
+     State('edit-shares-input', 'value'),
+     State('stocks-store', 'data')],
+    prevent_initial_call=True
+)
+def sync_modify(prev, n_clicks_btn, current, selected_rows, new_shares, store_data):
+    triggered = ctx.triggered_id
+    # deletion or inline change
+    if prev is not None and triggered == 'stocks-table':
+        prev_ids = {r['id'] for r in prev}
+        curr_ids = {r['id'] for r in current}
+        deleted = prev_ids - curr_ids
+        edited = [(old, new) for old, new in zip(prev, current)
+                  if old.get('shares') != new.get('shares')]
+        if deleted:
+            for sid in deleted:
+                db_manager.delete_stock(sid)
+        if edited:
+            for _, new_row in edited:
+                db_manager.update_stock(new_row['id'], None, new_row['shares'])
+        if not deleted and not edited:
+            raise PreventUpdate
+        return (store_data or 0) + 1, ""
+    # update via numeric input and button
+    elif triggered == 'update-shares-btn':
+        if not selected_rows or new_shares is None:
+            return dash.no_update, "Select a row and enter valid number."
+        row = current[selected_rows[0]]
         try:
-            df = db_manager.get_stocks()
-            if not df.empty and ticker in df["ticker"].values:
-                record = df[df["ticker"] == ticker].iloc[0]
-                db_manager.update_stock(record["id"], ticker, shares)
-                message = f"Updated {ticker} with {shares} shares."
-            else:
-                db_manager.insert_stock(ticker, shares)
-                message = f"Added {ticker} with {shares} shares."
-            store_data = (store_data + 1) if isinstance(store_data, int) else 1
-            return message, store_data
+            db_manager.update_stock(row['id'], row['ticker'], new_shares)
+            msg = f"Updated {row['ticker']} to {new_shares} shares."
+            return (store_data or 0) + 1, msg
         except Exception as e:
-            return f"Error: {str(e)}", store_data
-    return "", store_data
+            return dash.no_update, f"Error: {e}"
+    else:
+        raise PreventUpdate
+    
 
-# Callback for deleting a stock.
 @dash.callback(
-    dash.dependencies.Output("dummy-output-delete", "children"),
-    [dash.dependencies.Input("stocks-table", "active_cell")],
-    [dash.dependencies.State("stocks-table", "data")]
+    Output('stocks-table', 'data', allow_duplicate=True),
+    [Input('stocks-store', 'modified_timestamp')],
+    [State('stocks-store', 'data')],
+    prevent_initial_call='initial_duplicate'
 )
-def delete_stock(active_cell, table_data):
-    if active_cell and table_data:
-        row = active_cell.get("row")
-        col = active_cell.get("column_id")
-        if col == "actions" and row is not None and row < len(table_data):
-            stock_id = table_data[row].get("id")
-            try:
-                db_manager.delete_stock(stock_id)
-                return f"Deleted stock {stock_id}"
-            except Exception as e:
-                return f"Error deleting stock: {str(e)}"
-    return ""
+def load_stocks_on_init(ts, store_data):
+    df = db_manager.get_stocks()
+    return df.to_dict('records') if not df.empty else []

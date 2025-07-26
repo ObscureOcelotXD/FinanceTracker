@@ -1,0 +1,12 @@
+/* make the delete-X red and larger */
+.dash-spreadsheet-container .dash-spreadsheet-delete-row {
+    color: #e74c3c;
+    font-size: 1.1em;
+    text-align: center;
+  }
+  
+  /* add some padding so it isn’t jammed to the edge */
+  .dash-spreadsheet-container .dash-spreadsheet-delete-row-cell {
+    padding-right: 12px;
+  }
+  
