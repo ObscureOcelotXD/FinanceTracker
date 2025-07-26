@@ -1,8 +1,4 @@
 import sys
-import csv
-import re
-import os
-import subprocess 
 from datetime import datetime
 from collections import defaultdict
 from PySide6.QtGui import QBrush, QColor
