@@ -10,6 +10,7 @@ dash.register_page(
     path="/stocks_manage",
     name="Manage Stocks",
     layout=dbc.Container([
+        dcc.Store(id="stocks-store", data=0),
         dbc.Row(dbc.Col(html.H1("Manage Stocks", className="text-center mb-4"), width=12)),
 
         # Add / update new stock
@@ -46,7 +47,6 @@ dash.register_page(
                             row_deletable=True,
                             row_selectable='single',
                             columns=[
-                                {"name": "ID", "id": "id", "hidden": True},
                                 {"name": "Ticker", "id": "ticker"},
                                 {"name": "Shares", "id": "shares", "type": "numeric"}
                             ],
@@ -72,16 +72,6 @@ dash.register_page(
         )
     ], fluid=True)
 )
-
-# Reload table whenever store changes or periodic interval (if using interval)
-@dash.callback(
-    Output('stocks-table', 'data'),
-    [Input('stocks-store', 'data')],
-    prevent_initial_call=False
-)
-def load_stocks_table(store_data):
-    df = db_manager.get_stocks()
-    return df.to_dict('records') if not df.empty else []
 
 # Add or update new stock
 @dash.callback(
@@ -160,3 +150,4 @@ def sync_modify(prev, n_clicks_btn, current, selected_rows, new_shares, store_da
 def load_stocks_on_init(ts, store_data):
     df = db_manager.get_stocks()
     return df.to_dict('records') if not df.empty else []
+

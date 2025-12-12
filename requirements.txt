@@ -19,3 +19,4 @@ python-dotenv==1.0.1
 plaid-python==7.0.0
 plaid==0.1.7
 plaid-python==29.1.0
+pip==25.3
