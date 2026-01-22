@@ -268,6 +268,13 @@ def get_value_stocks():
     df['position_value'] = df['shares'] * df['closing_price']
     return df
 
+def get_stock_prices_df():
+    conn = get_connection()
+    query = "SELECT ticker, date, closing_price FROM stock_prices"
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    return df
+
 def insert_stock(ticker, shares):
     """
     Insert a new stock record into the Stocks table.

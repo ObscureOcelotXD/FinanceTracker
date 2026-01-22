@@ -1,0 +1,26 @@
+.chart-dropdown .Select-control {
+  background-color: #ffffff;
+  color: #000000;
+  border-color: #2b3035;
+}
+
+.chart-dropdown .Select-value-label,
+.chart-dropdown .Select-input input,
+.chart-dropdown .Select-placeholder {
+  color: #000000 !important;
+}
+
+.chart-dropdown .Select-menu-outer,
+.chart-dropdown .Select-menu {
+  background-color: #d9f4d0; /* light green option list */
+  color: #000000;
+}
+
+.chart-dropdown .Select-option {
+  background-color: #d9f4d0;
+  color: #000000;
+}
+
+.chart-dropdown .Select-option.is-focused {
+  background-color: #bfe9b3;
+}

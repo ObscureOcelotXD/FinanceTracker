@@ -7,10 +7,20 @@ import datetime
 from dotenv import load_dotenv
 try:
     # When running from the project root.
-    from db_manager import get_all_tickers, upsert_stock_price
+    from db_manager import (
+        get_all_tickers,
+        upsert_stock_price,
+        get_last_update,
+        set_last_update,
+    )
 except ModuleNotFoundError:
     # When the package is imported as a module (e.g., api.finnhub_api).
-    from ..db_manager import get_all_tickers, upsert_stock_price
+    from ..db_manager import (
+        get_all_tickers,
+        upsert_stock_price,
+        get_last_update,
+        set_last_update,
+    )
 
 finnhub_api = Blueprint("finnhub_api", __name__)
 
@@ -128,9 +138,14 @@ def fetch_stock_prices_batch(tickers):
             batch_prices[ticker] = price
     return batch_prices
 
-def update_stock_prices():
+def update_stock_prices(forceUpdate: bool = False):
     tickers = get_all_tickers()  # e.g., returns a list like ["AAPL", "MSFT", "GOOG", ...]
     today = datetime.date.today().isoformat()
+
+    last_run = get_last_update()
+    if last_run == today and not forceUpdate:
+        print("[Finnhub] Update already performed today. Skipping update.")
+        return
 
     # Fetch prices concurrently using Finnhub
     print(f"[Finnhub] Fetching prices for {len(tickers)} tickers on {today}...")
@@ -143,3 +158,4 @@ def update_stock_prices():
             print(f"[Finnhub] Upserted price for {ticker}: {price}")
         else:
             print(f"[Finnhub] Price for {ticker} not available.")
+    set_last_update(today)

@@ -10,7 +10,7 @@ dash_app = Dash(
     __name__,
     server=flask_app,
     url_base_pathname='/dashboard/',
-    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    external_stylesheets=[dbc.themes.DARKLY],
     suppress_callback_exceptions=True,
     use_pages=True, 
     pages_folder='dashPages'
@@ -26,7 +26,7 @@ dash_app.layout = html.Div([
         dbc.NavLink("Manage Stocks", href="/dashboard/stocks_manage", active="exact")
     ],
     brand="Stocks App",
-    color="primary",
+    color="dark",
     dark=True,
     ),
     dcc.Interval(id='interval-component', interval=60*1000, n_intervals=0),
