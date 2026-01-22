@@ -1,5 +1,6 @@
 import dash
 from dash import html, dcc, dash_table, ctx
+from dash.dash_table import FormatTemplate
 import dash_bootstrap_components as dbc
 import db_manager
 from dash.dependencies import Output, Input, State
@@ -31,7 +32,7 @@ dash.register_page(
                                                 placeholder="Ticker (e.g. NVDA)",
                                                 className="form-control mb-2",
                                             ),
-                                            width=4,
+                                            width=3,
                                         ),
                                         dbc.Col(
                                             dcc.Input(
@@ -42,7 +43,18 @@ dash.register_page(
                                                 step=1,
                                                 className="form-control mb-2",
                                             ),
-                                            width=4,
+                                            width=3,
+                                        ),
+                                        dbc.Col(
+                                            dcc.Input(
+                                                id="cost-basis-input",
+                                                type="number",
+                                                placeholder="Cost basis",
+                                                min=0,
+                                                step=0.01,
+                                                className="form-control mb-2",
+                                            ),
+                                            width=3,
                                         ),
                                         dbc.Col(
                                             dbc.Button(
@@ -51,7 +63,7 @@ dash.register_page(
                                                 color="primary",
                                                 className="w-100 mb-2",
                                             ),
-                                            width=4,
+                                            width=3,
                                         ),
                                     ]
                                 ),
@@ -61,7 +73,7 @@ dash.register_page(
                     ],
                     className="mb-4",
                 ),
-                width={"size": 8, "offset": 2}
+                width={"size": 6, "offset": 3}
             )
         ),
 
@@ -73,6 +85,7 @@ dash.register_page(
                         dbc.CardHeader(html.H4("Stocks")),
                         dbc.CardBody(
                             [
+                                html.Button(id="clear-active-cell-btn", style={"display": "none"}),
                                 dash_table.DataTable(
                                     id="stocks-table",
                                     row_deletable=False,
@@ -80,12 +93,32 @@ dash.register_page(
                                     columns=[
                                         {"name": "Ticker", "id": "ticker"},
                                         {"name": "Shares", "id": "shares", "type": "numeric", "editable": True},
+                                        {
+                                            "name": "Cost Basis",
+                                            "id": "cost_basis",
+                                            "type": "numeric",
+                                            "format": FormatTemplate.money(2),
+                                            "editable": True,
+                                        },
                                     ],
                                     data=[],
                                     style_table={"overflowX": "auto"},
                                     style_cell={"textAlign": "center"},
                                     style_header={"backgroundColor": "#1f2c3b", "fontWeight": "bold"},
                                     style_data={"backgroundColor": "#11181f"},
+                                    style_data_conditional=[
+                                        {
+                                            "if": {"state": "active"},
+                                            "backgroundColor": "#ffffff",
+                                            "color": "#000000",
+                                            "border": "1px solid #000000",
+                                        },
+                                        {
+                                            "if": {"state": "selected"},
+                                            "backgroundColor": "#11181f",
+                                            "color": "#ffffff",
+                                        },
+                                    ],
                                     filter_action="native",
                                     sort_action="native",
                                     page_size=10,
@@ -102,7 +135,18 @@ dash.register_page(
                                                 step=1,
                                                 className="form-control",
                                             ),
-                                            width=4,
+                                            width=3,
+                                        ),
+                                        dbc.Col(
+                                            dcc.Input(
+                                                id="edit-cost-basis-input",
+                                                type="number",
+                                                placeholder="New cost basis",
+                                                min=0,
+                                                step=0.01,
+                                                className="form-control",
+                                            ),
+                                            width=3,
                                         ),
                                         dbc.Col(
                                             dbc.Button(
@@ -131,7 +175,7 @@ dash.register_page(
                     ],
                     className="mb-4",
                 ),
-                width={"size": 8, "offset": 2}
+                width={"size": 6, "offset": 3}
             )
         )
     ], fluid=True)
@@ -145,23 +189,24 @@ dash.register_page(
     Input("add-stock-button", "n_clicks"),
     [State("ticker-input", "value"),
      State("shares-input", "value"),
+     State("cost-basis-input", "value"),
      State("stocks-store", "data")]
 )
-def add_stock(n_clicks, ticker, shares, store_data):
+def add_stock(n_clicks, ticker, shares, cost_basis, store_data):
     if not n_clicks:
         raise PreventUpdate
     if not ticker or shares is None:
-        return "Enter both ticker and shares.", True, dash.no_update
+        return "Enter ticker and shares.", True, dash.no_update
     ticker = ticker.upper().strip()
     try:
         df = db_manager.get_stocks()
         existing = df[df["ticker"] == ticker]
         if not existing.empty:
             stock_id = int(existing.iloc[0]["id"])
-            db_manager.update_stock(stock_id, ticker, shares)
+            db_manager.update_stock(stock_id, ticker=ticker, shares=shares, cost_basis=cost_basis)
             msg = f"Updated {ticker} → {shares} shares."
         else:
-            db_manager.insert_stock(ticker, shares)
+            db_manager.insert_stock(ticker, shares, cost_basis=cost_basis)
             msg = f"Added {ticker} → {shares} shares."
         return msg, True, (store_data or 0) + 1
     except Exception as e:
@@ -177,10 +222,11 @@ def add_stock(n_clicks, ticker, shares, store_data):
     [State('stocks-table', 'data'),
      State('stocks-table', 'selected_rows'),
      State('edit-shares-input', 'value'),
+     State('edit-cost-basis-input', 'value'),
      State('stocks-store', 'data')],
     prevent_initial_call=True
 )
-def sync_modify(prev, n_clicks_btn, current, selected_rows, new_shares, store_data):
+def sync_modify(prev, n_clicks_btn, current, selected_rows, new_shares, new_cost_basis, store_data):
     triggered = ctx.triggered_id
     # deletion or inline change
     if prev is not None and triggered == 'stocks-table':
@@ -188,24 +234,34 @@ def sync_modify(prev, n_clicks_btn, current, selected_rows, new_shares, store_da
         curr_ids = {r['id'] for r in current}
         deleted = prev_ids - curr_ids
         edited = [(old, new) for old, new in zip(prev, current)
-                  if old.get('shares') != new.get('shares')]
+                  if old.get('shares') != new.get('shares') or old.get('cost_basis') != new.get('cost_basis')]
         if deleted:
             for sid in deleted:
                 db_manager.delete_stock(sid)
         if edited:
             for _, new_row in edited:
-                db_manager.update_stock(new_row['id'], new_row['ticker'], new_row['shares'])
+                db_manager.update_stock(
+                    new_row['id'],
+                    ticker=new_row['ticker'],
+                    shares=new_row['shares'],
+                    cost_basis=new_row.get('cost_basis'),
+                )
         if not deleted and not edited:
             raise PreventUpdate
         return (store_data or 0) + 1, "", False
     # update via numeric input and button
     elif triggered == 'update-shares-btn':
-        if not selected_rows or new_shares is None:
-            return dash.no_update, "Select a row and enter valid number.", True
+        if not selected_rows or (new_shares is None and new_cost_basis is None):
+            return dash.no_update, "Select a row and enter valid values.", True
         row = current[selected_rows[0]]
         try:
-            db_manager.update_stock(row['id'], row['ticker'], new_shares)
-            msg = f"Updated {row['ticker']} to {new_shares} shares."
+            db_manager.update_stock(
+                row['id'],
+                ticker=row['ticker'],
+                shares=new_shares,
+                cost_basis=new_cost_basis,
+            )
+            msg = f"Updated {row['ticker']}."
             return (store_data or 0) + 1, msg, True
         except Exception as e:
             return dash.no_update, f"Error: {e}", True
@@ -253,6 +309,17 @@ def delete_selected(submit_n_clicks, selected_rows, current, store_data):
     msg = f"Deleted {row['ticker']}."
     return (store_data or 0) + 1, msg, True
     
+
+@dash.callback(
+    Output("stocks-table", "active_cell"),
+    Output("stocks-table", "selected_cells"),
+    Output("stocks-table", "selected_rows"),
+    Input("clear-active-cell-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def clear_active_cell(n_clicks):
+    return None, [], []
+
 
 @dash.callback(
     Output('stocks-table', 'data', allow_duplicate=True),

@@ -55,11 +55,32 @@ def init_db():
             shares REAL NOT NULL
         )
     """)
+    # Add cost_basis column if it doesn't exist yet.
+    cur4.execute("PRAGMA table_info(Stocks)")
+    stock_columns = [row[1] for row in cur4.fetchall()]
+    if "cost_basis" not in stock_columns:
+        cur4.execute("ALTER TABLE Stocks ADD COLUMN cost_basis REAL")
     # Merge duplicate tickers before enforcing uniqueness.
     cur4.execute("""
         UPDATE Stocks
         SET shares = (
             SELECT SUM(s2.shares)
+            FROM Stocks s2
+            WHERE s2.ticker = Stocks.ticker
+        )
+        WHERE id IN (
+            SELECT MIN(id)
+            FROM Stocks
+            GROUP BY ticker
+        )
+    """)
+    cur4.execute("""
+        UPDATE Stocks
+        SET cost_basis = (
+            SELECT CASE
+                WHEN SUM(s2.shares) = 0 THEN NULL
+                ELSE SUM(s2.shares * COALESCE(s2.cost_basis, 0)) / SUM(s2.shares)
+            END
             FROM Stocks s2
             WHERE s2.ticker = Stocks.ticker
         )
@@ -271,7 +292,7 @@ def get_all_records_df():
 #region Stock Data
 def get_stocks():
     conn = get_connection()
-    query = "SELECT id,ticker,shares FROM Stocks"
+    query = "SELECT id,ticker,shares,COALESCE(cost_basis, 0) AS cost_basis FROM Stocks"
     df = pd.read_sql_query(query, conn)
     conn.close()
     return df
@@ -279,7 +300,14 @@ def get_stocks():
 def get_duplicate_stocks_df():
     conn = get_connection()
     query = """
-        SELECT ticker, COUNT(*) AS occurrences, SUM(shares) AS total_shares
+        SELECT
+            ticker,
+            COUNT(*) AS occurrences,
+            SUM(shares) AS total_shares,
+            CASE
+                WHEN SUM(shares) = 0 THEN NULL
+                ELSE SUM(shares * COALESCE(cost_basis, 0)) / SUM(shares)
+            END AS avg_cost_basis
         FROM Stocks
         GROUP BY ticker
         HAVING COUNT(*) > 1
@@ -342,26 +370,43 @@ def delete_orphan_stock_prices():
     conn.commit()
     conn.close()
 
-def insert_stock(ticker, shares):
+def insert_stock(ticker, shares, cost_basis=None):
     """
     Insert a new stock record into the Stocks table.
     Returns the new stock's id.
     """
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("INSERT INTO Stocks (ticker, shares) VALUES (?, ?)", (ticker, shares))
+    cur.execute(
+        "INSERT INTO Stocks (ticker, shares, cost_basis) VALUES (?, ?, ?)",
+        (ticker, shares, cost_basis),
+    )
     conn.commit()
     stock_id = cur.lastrowid
     conn.close()
     return stock_id
 
-def update_stock(stock_id, ticker, shares):
+def update_stock(stock_id, ticker=None, shares=None, cost_basis=None):
     """
     Update an existing stock record with the given id.
     """
+    fields = []
+    params = []
+    if ticker is not None:
+        fields.append("ticker = ?")
+        params.append(ticker)
+    if shares is not None:
+        fields.append("shares = ?")
+        params.append(shares)
+    if cost_basis is not None:
+        fields.append("cost_basis = ?")
+        params.append(cost_basis)
+    if not fields:
+        return
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("UPDATE Stocks SET ticker = ?, shares = ? WHERE id = ?", (ticker, shares, stock_id))
+    params.append(stock_id)
+    cur.execute(f"UPDATE Stocks SET {', '.join(fields)} WHERE id = ?", params)
     conn.commit()
     conn.close()
 
