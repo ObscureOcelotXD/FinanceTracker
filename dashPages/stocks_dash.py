@@ -1,6 +1,6 @@
 # pages/stocks_dash.py
 import dash
-from dash import html, dcc, callback, Input, Output, State
+from dash import html, dcc, Input, Output, State, get_app
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import pandas as pd
@@ -8,6 +8,8 @@ import db_manager
 
 # Register page
 dash.register_page(__name__, path="/stocks_dash", name="Display")
+
+dash_app = get_app()
 
 def _normalize_price_df(df):
     if df.empty:
@@ -96,7 +98,7 @@ def _historical_chart(df, tickers, chart_type, start_date, end_date):
     return fig
 
 # Combined callback to update value bar and pie charts
-@callback(
+@dash_app.callback(
     Output("stocks-value-chart", "figure"),
     Output("stocks-allocation-chart", "figure"),
     Input('interval-component', 'n_intervals'),
@@ -109,8 +111,14 @@ def update_value_graphs(n_intervals, store_data, value_chart_type, allocation_ch
     return _value_chart(df, value_chart_type), _allocation_chart(df, allocation_chart_type)
 
 # 2. Add a new callback (or extend existing one) that reacts to the button
-@dash.callback(
+@dash_app.callback(
     Output("stocks-store-display", "data", allow_duplicate=True),
+    Output("force-update-alert", "children"),
+    Output("force-update-alert", "is_open"),
+    Output("force-update-alert", "color"),
+    Output("force-update-btn", "children"),
+    Output("force-update-btn", "disabled"),
+    Output("force-update-timer", "disabled"),
     Input("force-update-btn", "n_clicks"),
     State("stocks-store-display", "data"),
     prevent_initial_call=True,
@@ -118,12 +126,15 @@ def update_value_graphs(n_intervals, store_data, value_chart_type, allocation_ch
 def force_update_table(n_clicks, current_counter):
     print(f"Callback triggered! n_clicks: {n_clicks}, current_counter: {current_counter}")
     if n_clicks is None:
-        return False
+        return False, "", False, "info", "Force Update Table", False, True
     # Call the update function with forceUpdate=True
-    from api.finnhub_api import update_stock_prices
-    update_stock_prices(forceUpdate=True)
-    # Just increment the counter → this will trigger your existing load_stocks_table callback
-    return (current_counter or 0) + 1
+    try:
+        from api.finnhub_api import update_stock_prices
+        update_stock_prices(forceUpdate=True)
+        # Just increment the counter → this will trigger your existing load_stocks_table callback
+        return (current_counter or 0) + 1, "Prices updated.", True, "success", "Force Update Table", False, False
+    except Exception as exc:
+        return dash.no_update, f"Update failed: {exc}", True, "danger", "Force Update Table", False, False
     
     
 # Page layout
@@ -150,11 +161,29 @@ layout = html.Div(
         dbc.Row(
             [
                 dbc.Col(
-                    dbc.Button(
-                        "Force Update Table",
-                        id="force-update-btn",
-                        color="info",
-                        className="mt-3",
+                    dcc.Loading(
+                        dbc.Button(
+                            "Force Update Table",
+                            id="force-update-btn",
+                            color="info",
+                            className="mt-3",
+                        ),
+                        type="circle",
+                    ),
+                    width="auto",
+                )
+            ],
+            justify="center",
+        ),
+        dcc.Interval(id="force-update-timer", interval=4000, n_intervals=0, disabled=True),
+        dbc.Row(
+            [
+                dbc.Col(
+                    dbc.Alert(
+                        id="force-update-alert",
+                        is_open=False,
+                        dismissable=True,
+                        className="mt-2",
                     ),
                     width="auto",
                 )
@@ -293,7 +322,7 @@ layout = html.Div(
 )
 
 
-@callback(
+@dash_app.callback(
     Output("stocks-historical-chart", "figure"),
     Input("interval-component", "n_intervals"),
     Input("stocks-store-display", "data"),
@@ -306,4 +335,16 @@ def update_historical_chart(n_intervals, store_data, tickers, chart_type, start_
     df = db_manager.get_stock_prices_df()
     return _historical_chart(df, tickers, chart_type, start_date, end_date)
 
+
+@dash_app.callback(
+    Output("force-update-alert", "is_open", allow_duplicate=True),
+    Output("force-update-timer", "disabled", allow_duplicate=True),
+    Input("force-update-timer", "n_intervals"),
+    State("force-update-alert", "is_open"),
+    prevent_initial_call=True,
+)
+def auto_hide_force_update_alert(n_intervals, is_open):
+    if not is_open:
+        return False, True
+    return False, True
 

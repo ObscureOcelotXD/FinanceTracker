@@ -329,6 +329,19 @@ def get_stock_prices_df():
     conn.close()
     return df
 
+def delete_orphan_stock_prices():
+    """
+    Remove stock_prices rows for tickers that are no longer in Stocks.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        DELETE FROM stock_prices
+        WHERE ticker NOT IN (SELECT ticker FROM Stocks)
+    """)
+    conn.commit()
+    conn.close()
+
 def insert_stock(ticker, shares):
     """
     Insert a new stock record into the Stocks table.
