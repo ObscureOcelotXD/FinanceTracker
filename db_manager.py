@@ -55,6 +55,33 @@ def init_db():
             shares REAL NOT NULL
         )
     """)
+    # Merge duplicate tickers before enforcing uniqueness.
+    cur4.execute("""
+        UPDATE Stocks
+        SET shares = (
+            SELECT SUM(s2.shares)
+            FROM Stocks s2
+            WHERE s2.ticker = Stocks.ticker
+        )
+        WHERE id IN (
+            SELECT MIN(id)
+            FROM Stocks
+            GROUP BY ticker
+        )
+    """)
+    cur4.execute("""
+        DELETE FROM Stocks
+        WHERE id NOT IN (
+            SELECT MIN(id)
+            FROM Stocks
+            GROUP BY ticker
+        )
+    """)
+    # Enforce unique tickers to prevent duplicates going forward.
+    cur4.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_stocks_ticker
+        ON Stocks (ticker)
+    """)
 
     cur5 = con.cursor()
     cur5.execute("""
@@ -249,6 +276,18 @@ def get_stocks():
     conn.close()
     return df
 
+def get_duplicate_stocks_df():
+    conn = get_connection()
+    query = """
+        SELECT ticker, COUNT(*) AS occurrences, SUM(shares) AS total_shares
+        FROM Stocks
+        GROUP BY ticker
+        HAVING COUNT(*) > 1
+    """
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    return df
+
 def get_value_stocks():
     conn = get_connection()
     # activeStocks = "SELECT id,ticker,shares FROM Stocks"
@@ -258,10 +297,25 @@ def get_value_stocks():
     # stockPricesList = pd.read_sql_query(getStockPrices, conn)
 
     query = """
-        SELECT s.id, s.ticker, s.shares, sp.date, sp.closing_price
-        FROM Stocks s
-        JOIN stock_prices sp ON s.ticker = sp.ticker
-        where sp.date = (select max(date) from stock_prices)
+        SELECT
+            s.ticker,
+            s.total_shares AS shares,
+            sp.date,
+            sp.closing_price
+        FROM (
+            SELECT ticker, SUM(shares) AS total_shares
+            FROM Stocks
+            GROUP BY ticker
+        ) s
+        JOIN stock_prices sp
+            ON s.ticker = sp.ticker
+        JOIN (
+            SELECT ticker, MAX(date) AS max_date
+            FROM stock_prices
+            GROUP BY ticker
+        ) latest
+            ON latest.ticker = sp.ticker
+           AND latest.max_date = sp.date
         """
     df = pd.read_sql_query(query, conn)
     conn.close()
