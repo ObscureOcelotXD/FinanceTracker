@@ -133,12 +133,13 @@ def update_stock_prices():
     today = datetime.date.today().isoformat()
 
     # Fetch prices concurrently using Finnhub
+    print(f"[Finnhub] Fetching prices for {len(tickers)} tickers on {today}...")
     batch_prices = fetch_stock_prices_batch(tickers)
     
     for ticker in tickers:
         price = batch_prices.get(ticker)
         if price is not None:
             upsert_stock_price(ticker, today, price)
-            print(f"Inserted price for {ticker}: {price}")
+            print(f"[Finnhub] Upserted price for {ticker}: {price}")
         else:
-            print(f"Price for {ticker} not available.")
+            print(f"[Finnhub] Price for {ticker} not available.")

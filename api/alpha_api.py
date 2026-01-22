@@ -226,8 +226,8 @@ def update_stock_prices(forceUpdate: bool = False):
         # price = batch_prices.get(ticker)
         if price is not None:
             upsert_stock_price(ticker, today, price)
-            print(f"Inserted price for {ticker}: {price}")
+            print(f"[Alpha Vantage] Upserted price for {ticker}: {price}")
         else:
-            print(f"Skipping {ticker} due to error in fetching price.")
+            print(f"[Alpha Vantage] Skipping {ticker} due to error in fetching price.")
     set_last_update(today)
 #end region
