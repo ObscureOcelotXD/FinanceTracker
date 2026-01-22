@@ -49,7 +49,7 @@ dash.register_page(
                                             dcc.Input(
                                                 id="cost-basis-input",
                                                 type="number",
-                                                placeholder="Cost basis",
+                                                placeholder="Total cost basis",
                                                 min=0,
                                                 step=0.01,
                                                 className="form-control mb-2",
@@ -86,6 +86,29 @@ dash.register_page(
                         dbc.CardBody(
                             [
                                 html.Button(id="clear-active-cell-btn", style={"display": "none"}),
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            dcc.Dropdown(
+                                                id="stocks-columns-toggle",
+                                                options=[
+                                                    {"label": "Ticker", "value": "ticker"},
+                                                    {"label": "Shares", "value": "shares"},
+                                                    {"label": "Cost Basis", "value": "cost_basis"},
+                                                    {"label": "Position Value", "value": "position_value"},
+                                                    {"label": "Gain/Loss", "value": "gain_loss"},
+                                                    {"label": "% Gain", "value": "gain_loss_pct"},
+                                                ],
+                                                value=[],
+                                                multi=True,
+                                                placeholder="Hide columns...",
+                                                className="chart-dropdown",
+                                            ),
+                                            width=6,
+                                        )
+                                    ],
+                                    className="mb-3",
+                                ),
                                 dash_table.DataTable(
                                     id="stocks-table",
                                     row_deletable=False,
@@ -100,6 +123,24 @@ dash.register_page(
                                             "format": FormatTemplate.money(2),
                                             "editable": True,
                                         },
+                                        {
+                                            "name": "Position Value",
+                                            "id": "position_value",
+                                            "type": "numeric",
+                                            "format": FormatTemplate.money(2),
+                                        },
+                                        {
+                                            "name": "Gain/Loss",
+                                            "id": "gain_loss",
+                                            "type": "numeric",
+                                            "format": FormatTemplate.money(2),
+                                        },
+                                        {
+                                            "name": "% Gain",
+                                            "id": "gain_loss_pct",
+                                            "type": "numeric",
+                                            "format": FormatTemplate.percentage(2),
+                                        },
                                     ],
                                     data=[],
                                     style_table={"overflowX": "auto"},
@@ -107,6 +148,34 @@ dash.register_page(
                                     style_header={"backgroundColor": "#1f2c3b", "fontWeight": "bold"},
                                     style_data={"backgroundColor": "#11181f"},
                                     style_data_conditional=[
+                                        {
+                                            "if": {
+                                                "filter_query": "{gain_loss} > 0",
+                                                "column_id": "gain_loss",
+                                            },
+                                            "color": "#22c55e",
+                                        },
+                                        {
+                                            "if": {
+                                                "filter_query": "{gain_loss} < 0",
+                                                "column_id": "gain_loss",
+                                            },
+                                            "color": "#ef4444",
+                                        },
+                                        {
+                                            "if": {
+                                                "filter_query": "{gain_loss_pct} > 0",
+                                                "column_id": "gain_loss_pct",
+                                            },
+                                            "color": "#22c55e",
+                                        },
+                                        {
+                                            "if": {
+                                                "filter_query": "{gain_loss_pct} < 0",
+                                                "column_id": "gain_loss_pct",
+                                            },
+                                            "color": "#ef4444",
+                                        },
                                         {
                                             "if": {"state": "active"},
                                             "backgroundColor": "#ffffff",
@@ -141,7 +210,7 @@ dash.register_page(
                                             dcc.Input(
                                                 id="edit-cost-basis-input",
                                                 type="number",
-                                                placeholder="New cost basis",
+                                                placeholder="New total cost basis",
                                                 min=0,
                                                 step=0.01,
                                                 className="form-control",
@@ -175,7 +244,7 @@ dash.register_page(
                     ],
                     className="mb-4",
                 ),
-                width={"size": 6, "offset": 3}
+                width={"size": 8, "offset": 2}
             )
         )
     ], fluid=True)
@@ -311,6 +380,14 @@ def delete_selected(submit_n_clicks, selected_rows, current, store_data):
     
 
 @dash.callback(
+    Output("stocks-table", "hidden_columns"),
+    Input("stocks-columns-toggle", "value"),
+)
+def toggle_columns(hidden_columns):
+    return hidden_columns or []
+
+
+@dash.callback(
     Output("stocks-table", "active_cell"),
     Output("stocks-table", "selected_cells"),
     Output("stocks-table", "selected_rows"),
@@ -329,5 +406,16 @@ def clear_active_cell(n_clicks):
 )
 def load_stocks_on_init(ts, store_data):
     df = db_manager.get_stocks()
-    return df.to_dict('records') if not df.empty else []
+    if df.empty:
+        return []
+    totals = {
+        "ticker": "TOTAL",
+        "shares": df["shares"].sum(),
+        "cost_basis": df["cost_basis"].sum(),
+        "position_value": df["position_value"].sum(),
+        "gain_loss": df["gain_loss"].sum(),
+    }
+    if totals["cost_basis"]:
+        totals["gain_loss_pct"] = totals["gain_loss"] / totals["cost_basis"]
+    return df.to_dict("records") + [totals]
 

@@ -77,10 +77,7 @@ def init_db():
     cur4.execute("""
         UPDATE Stocks
         SET cost_basis = (
-            SELECT CASE
-                WHEN SUM(s2.shares) = 0 THEN NULL
-                ELSE SUM(s2.shares * COALESCE(s2.cost_basis, 0)) / SUM(s2.shares)
-            END
+            SELECT SUM(COALESCE(s2.cost_basis, 0))
             FROM Stocks s2
             WHERE s2.ticker = Stocks.ticker
         )
@@ -292,7 +289,30 @@ def get_all_records_df():
 #region Stock Data
 def get_stocks():
     conn = get_connection()
-    query = "SELECT id,ticker,shares,COALESCE(cost_basis, 0) AS cost_basis FROM Stocks"
+    query = """
+        SELECT
+            s.id,
+            s.ticker,
+            s.shares,
+            COALESCE(s.cost_basis, 0) AS cost_basis,
+            sp.closing_price AS latest_price,
+            (s.shares * sp.closing_price) AS position_value,
+            ((s.shares * sp.closing_price) - COALESCE(s.cost_basis, 0)) AS gain_loss,
+            CASE
+                WHEN COALESCE(s.cost_basis, 0) = 0 THEN NULL
+                ELSE ((s.shares * sp.closing_price) - COALESCE(s.cost_basis, 0)) / COALESCE(s.cost_basis, 0)
+            END AS gain_loss_pct
+        FROM Stocks s
+        LEFT JOIN (
+            SELECT ticker, MAX(date) AS max_date
+            FROM stock_prices
+            GROUP BY ticker
+        ) latest
+            ON latest.ticker = s.ticker
+        LEFT JOIN stock_prices sp
+            ON sp.ticker = s.ticker
+           AND sp.date = latest.max_date
+    """
     df = pd.read_sql_query(query, conn)
     conn.close()
     return df
@@ -304,10 +324,7 @@ def get_duplicate_stocks_df():
             ticker,
             COUNT(*) AS occurrences,
             SUM(shares) AS total_shares,
-            CASE
-                WHEN SUM(shares) = 0 THEN NULL
-                ELSE SUM(shares * COALESCE(cost_basis, 0)) / SUM(shares)
-            END AS avg_cost_basis
+            SUM(COALESCE(cost_basis, 0)) AS total_cost_basis
         FROM Stocks
         GROUP BY ticker
         HAVING COUNT(*) > 1
