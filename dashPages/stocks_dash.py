@@ -1,6 +1,7 @@
 # pages/stocks_dash.py
 import dash
-from dash import html, dcc, callback, Input, Output
+from dash import html, dcc, callback, Input, Output,State
+import dash_bootstrap_components as dbc
 import plotly.express as px
 import pandas as pd
 import db_manager
@@ -41,35 +42,12 @@ def create_historical_graphs(df):
         graphs.append(dcc.Graph(id=f"hist-chart-{ticker}", figure=fig))
     return graphs
 
-# Page layout
-layout = html.Div([
-    html.H1("Stocks Dashboard", style={
-        'textAlign': 'center', 'marginBottom': '20px', 'fontFamily': 'Arial, sans-serif'
-    }),
-    # Value charts (initially empty, to be filled by callback)
-    html.Div([
-        dcc.Graph(id='stocks-value-bar-chart'),
-        dcc.Graph(id='stocks-value-pie-chart'),
-    ], style={
-        'display': 'flex', 'flexWrap': 'wrap', 'justifyContent': 'space-around',
-        'padding': '20px'
-    }),
-    # Historical ticker charts
-    html.Div(
-        create_historical_graphs(db_manager.get_value_stocks()),
-        style={'display': 'flex', 'flexWrap': 'wrap', 'justifyContent': 'space-around'}
-    ),
-    # Interval and Store for live updates
-    dcc.Interval(id='interval-component', interval=60 * 1000, n_intervals=0),
-    dcc.Store(id='stocks-store')
-], style={'paddingTop': '50px', 'backgroundColor': '#f9f9f9'})
-
 # Combined callback to update value bar and pie charts
 @callback(
     Output('stocks-value-bar-chart', 'figure'),
     Output('stocks-value-pie-chart', 'figure'),
     Input('interval-component', 'n_intervals'),
-    Input('stocks-store', 'data')
+    Input('stocks-store-display', 'data')
 )
 def update_value_graphs(n_intervals, store_data):
     df = db_manager.get_value_stocks()
@@ -86,3 +64,57 @@ def update_value_graphs(n_intervals, store_data):
     fig_pie.update_layout(margin=dict(l=20, r=20, t=50, b=20))
 
     return fig_bar, fig_pie
+
+# 2. Add a new callback (or extend existing one) that reacts to the button
+@dash.callback(
+    Output('stocks-store-display', 'data',allow_duplicate=True),          # bump the counter to trigger refresh
+    Input('force-update-btn', 'n_clicks'),
+    State('stocks-store-display', 'data'),
+    prevent_initial_call=True
+)
+def force_update_table(n_clicks, current_counter):
+    print(f"Callback triggered! n_clicks: {n_clicks}, current_counter: {current_counter}")
+    if n_clicks is None:
+        return False
+    # Call the update function with forceUpdate=True
+    from api.alpha_api import update_stock_prices
+    update_stock_prices(forceUpdate=True)
+    # Just increment the counter → this will trigger your existing load_stocks_table callback
+    return (current_counter or 0) + 1
+    
+    
+# Page layout
+layout = html.Div([
+    html.H1("Stocks Dashboard", style={
+        'textAlign': 'center', 'marginBottom': '20px', 'fontFamily': 'Arial, sans-serif'
+    }),
+    dbc.Row([
+        dbc.Col(
+            dbc.Button(
+                "Force Update Table",
+                id="force-update-btn",
+                color="info",
+                className="mt-3"
+            ),
+            width="auto"
+        )
+    ], justify="center"),
+    # Value charts (initially empty, to be filled by callback)
+    html.Div([
+        dcc.Graph(id='stocks-value-bar-chart'),
+        dcc.Graph(id='stocks-value-pie-chart'),
+    ], style={
+        'display': 'flex', 'flexWrap': 'wrap', 'justifyContent': 'space-around',
+        'padding': '20px'
+    }),
+    # Historical ticker charts
+    html.Div(
+        create_historical_graphs(db_manager.get_value_stocks()),
+        style={'display': 'flex', 'flexWrap': 'wrap', 'justifyContent': 'space-around'}
+    ),
+    # Interval and Store for live updates
+    dcc.Interval(id='interval-component', interval=60 * 1000, n_intervals=0),
+    dcc.Store(id='stocks-store-display')
+], style={'paddingTop': '50px', 'backgroundColor': '#f9f9f9'})
+
+

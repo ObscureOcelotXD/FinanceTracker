@@ -215,19 +215,21 @@ def run_flask():
 
 
 if __name__ == '__main__':
+    # Initialize Dash before the Flask server handles any requests.
+    import dashApp as dashApp
+    import dash_callbacks
+
     # Start Flask server in a separate thread
     flask_thread = Thread(target=run_flask, daemon=True)
     flask_thread.start()
-    import dashApp as dashApp
-    import dash_callbacks
     # Start the Qt application
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
 
     # Update stock prices needs to run here so db has time to initialize.
-    import api.alpha_api as av
-    av.update_stock_prices()
+    import api.finnhub_api as finnhub
+    finnhub.update_stock_prices()
     
     # Run the application event loop
     try:

@@ -1,12 +1,36 @@
-from flask import Blueprint, jsonify,request
+from flask import Blueprint, jsonify, request
 import os
 import requests
 import datetime
-from db_manager import get_all_tickers, insert_stock_price, set_last_update,get_last_update
+from dotenv import load_dotenv
+try:
+    # When running from the project root.
+    from db_manager import (
+        get_all_tickers,
+        upsert_stock_price,
+        set_last_update,
+        get_last_update,
+    )
+except ModuleNotFoundError:
+    # When the package is imported as a module (e.g., api.alpha_api).
+    from ..db_manager import (
+        get_all_tickers,
+        upsert_stock_price,
+        set_last_update,
+        get_last_update,
+    )
 
-alpha_api = Blueprint('alpha_api', __name__)
+alpha_api = Blueprint("alpha_api", __name__)
 
-ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
+# Load .env early so the key is available when this module is imported.
+load_dotenv()
+
+def _get_alpha_vantage_api_key():
+    key = os.getenv("ALPHA_VANTAGE_API_KEY") or os.getenv("ALPHAVANTAGE_API_KEY")
+    if key:
+        return key.strip()
+    return None
+
 ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
 def get_sp500_value():
     # Example: Use Alpha Vantage GLOBAL_QUOTE endpoint for S&P 500
@@ -14,7 +38,7 @@ def get_sp500_value():
     params = {
         "function": "GLOBAL_QUOTE",
         "symbol": "SPY",  # Check documentation for the correct symbol
-        "apikey": ALPHA_VANTAGE_API_KEY
+        "apikey": _get_alpha_vantage_api_key(),
     }
     response = requests.get(url, params=params)
     data = response.json()
@@ -42,7 +66,7 @@ def get_btc_value():
         "function": "DIGITAL_CURRENCY_DAILY",
         "symbol": "BTC",
         "market": "USD",
-        "apikey": ALPHA_VANTAGE_API_KEY
+        "apikey": _get_alpha_vantage_api_key(),
     }
     response = requests.get(url, params=params)
     data = response.json()
@@ -75,7 +99,7 @@ def get_stock_price(ticker):
     params = {
         "function": "GLOBAL_QUOTE",
         "symbol": ticker,
-        "apikey": ALPHA_VANTAGE_API_KEY
+        "apikey": _get_alpha_vantage_api_key(),
     }
     response = requests.get(url, params=params)
     data = response.json()
@@ -107,7 +131,7 @@ def get_crypto_price(ticker):
         "function": "DIGITAL_CURRENCY_DAILY",
         "symbol": ticker.upper(),  # Ensure ticker is uppercase
         "market": "USD",
-        "apikey": ALPHA_VANTAGE_API_KEY
+        "apikey": _get_alpha_vantage_api_key(),
     }
     response = requests.get(url, params=params)
     data = response.json()
@@ -142,7 +166,7 @@ def fetch_stock_price(ticker):
     params = {
         "function": "GLOBAL_QUOTE",  # Using the GLOBAL_QUOTE endpoint
         "symbol": ticker,
-        "apikey": ALPHA_VANTAGE_API_KEY
+        "apikey": _get_alpha_vantage_api_key(),
     }
     response = requests.get(ALPHA_VANTAGE_URL, params=params)
     data = response.json()
@@ -184,14 +208,14 @@ def fetch_stock_price(ticker):
 #         print(f"Error fetching batch prices: {e}. Response: {data}")
 #     return batch_prices
 
-def update_stock_prices():
+def update_stock_prices(forceUpdate: bool = False):
     """Fetches tickers from Stocks table, retrieves the latest price, and inserts into stock_prices."""
     # Get all ticker symbols from the Stocks table via db_manager
     tickers = get_all_tickers()
     today = datetime.date.today().isoformat()
     last_run = get_last_update()  # Your function to query the flag
 
-    if last_run == today:
+    if last_run == today and not forceUpdate:
         print("Update already performed today. Skipping update.")
         return
     
@@ -201,7 +225,7 @@ def update_stock_prices():
         price = fetch_stock_price(ticker)
         # price = batch_prices.get(ticker)
         if price is not None:
-            insert_stock_price(ticker, today, price)
+            upsert_stock_price(ticker, today, price)
             print(f"Inserted price for {ticker}: {price}")
         else:
             print(f"Skipping {ticker} due to error in fetching price.")

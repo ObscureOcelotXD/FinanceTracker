@@ -65,6 +65,20 @@ def init_db():
             closing_price REAL NOT NULL
         )
     """)
+    # Ensure no duplicate (ticker, date) rows before adding unique constraint.
+    cur5.execute("""
+        DELETE FROM stock_prices
+        WHERE id NOT IN (
+            SELECT MAX(id)
+            FROM stock_prices
+            GROUP BY ticker, date
+        )
+    """)
+    # Enforce one price per ticker per day.
+    cur5.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_prices_ticker_date
+        ON stock_prices (ticker, date)
+    """)
 
 
     cur6 = con.cursor()
@@ -304,6 +318,30 @@ def insert_stock_price(ticker, date, closing_price):
         INSERT INTO stock_prices (ticker, date, closing_price)
         VALUES (?, ?, ?)
     """, (ticker, date, closing_price))
+    conn.commit()
+    conn.close()
+
+def upsert_stock_price(ticker, date, closing_price):
+    """
+    Update the existing row for (ticker, date) if present; otherwise insert it.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id FROM stock_prices WHERE ticker = ? AND date = ?
+    """, (ticker, date))
+    row = cursor.fetchone()
+    if row:
+        cursor.execute("""
+            UPDATE stock_prices
+            SET closing_price = ?
+            WHERE id = ?
+        """, (closing_price, row[0]))
+    else:
+        cursor.execute("""
+            INSERT INTO stock_prices (ticker, date, closing_price)
+            VALUES (?, ?, ?)
+        """, (ticker, date, closing_price))
     conn.commit()
     conn.close()
 

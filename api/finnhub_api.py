@@ -4,23 +4,37 @@ import os
 import requests
 import concurrent.futures
 import datetime
-from db_manager import get_all_tickers, insert_stock_price
+from dotenv import load_dotenv
+try:
+    # When running from the project root.
+    from db_manager import get_all_tickers, upsert_stock_price
+except ModuleNotFoundError:
+    # When the package is imported as a module (e.g., api.finnhub_api).
+    from ..db_manager import get_all_tickers, upsert_stock_price
 
-finnhub_api = Blueprint('finnhub_api', __name__)
+finnhub_api = Blueprint("finnhub_api", __name__)
 
-FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")  # Make sure this is set in your environment
+# Load .env so the key is available when this module is imported.
+load_dotenv()
+
+def _get_finnhub_api_key():
+    key = os.getenv("FINNHUB_API_KEY")
+    if key:
+        return key.strip()
+    return None
+
 FINNHUB_QUOTE_URL = "https://finnhub.io/api/v1/quote"
 
 def get_stock_quote(symbol):
     url = FINNHUB_QUOTE_URL
-    params = {"symbol": symbol, "token": FINNHUB_API_KEY}
+    params = {"symbol": symbol, "token": _get_finnhub_api_key()}
     response = requests.get(url, params=params)
     print("Request URL:", response.request.url)
     data = response.json()
     print("Finnhub response:", data)
     return data
 
-@finnhub_api.route('/finnhub', methods=['GET'])
+@finnhub_api.route("/finnhub", methods=["GET"])
 def finnhub_quote():
     symbol = "SPY"  # You can later make this dynamic
     data = get_stock_quote(symbol)
@@ -30,18 +44,6 @@ def finnhub_quote():
         return jsonify({"symbol": symbol, "price": data["c"]})
     else:
         return jsonify({"error": "Data not found"}), 500
-
-
-def get_stock_quote(symbol):
-    """Call Finnhub's stock quote endpoint."""
-    url = FINNHUB_QUOTE_URL
-    params = {
-        "symbol": symbol,
-        "token": FINNHUB_API_KEY
-    }
-    response = requests.get(url, params=params)
-    data = response.json()
-    return data
 
 # def get_crypto_quote(symbol):
 #     """Call Finnhub's crypto quote endpoint.
@@ -56,7 +58,7 @@ def get_stock_quote(symbol):
 #     data = response.json()
 #     return data
 
-@finnhub_api.route('/stock', methods=['POST'])
+@finnhub_api.route("/stock", methods=["POST"])
 def stock_quote():
     data = request.get_json(force=True)
     ticker = data.get("ticker")
@@ -98,7 +100,7 @@ def fetch_finnhub_quote(ticker):
     """
     params = {
         "symbol": ticker,
-        "token": FINNHUB_API_KEY
+        "token": _get_finnhub_api_key(),
     }
     response = requests.get(FINNHUB_QUOTE_URL, params=params)
     data = response.json()
@@ -136,7 +138,7 @@ def update_stock_prices():
     for ticker in tickers:
         price = batch_prices.get(ticker)
         if price is not None:
-            insert_stock_price(ticker, today, price)
+            upsert_stock_price(ticker, today, price)
             print(f"Inserted price for {ticker}: {price}")
         else:
             print(f"Price for {ticker} not available.")
