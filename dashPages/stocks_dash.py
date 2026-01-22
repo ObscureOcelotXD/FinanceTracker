@@ -176,6 +176,21 @@ _ticker_options = (
 
 layout = html.Div(
     [
+        dbc.Row(
+            [
+                dbc.Col(
+                    dbc.Button(
+                        "🏠 Home",
+                        href="/",
+                        color="secondary",
+                        className="mb-2 mt-2",
+                        external_link=True,
+                    ),
+                    width="auto",
+                )
+            ],
+            justify="start",
+        ),
         html.H1(
             "Stocks Dashboard",
             style={

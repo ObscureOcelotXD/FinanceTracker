@@ -13,6 +13,21 @@ dash.register_page(
     layout=dbc.Container([
         dcc.Store(id="stocks-store", data=0),
         dcc.ConfirmDialog(id="confirm-delete"),
+        dbc.Row(
+            [
+                dbc.Col(
+                    dbc.Button(
+                        "🏠 Home",
+                        href="/",
+                        color="secondary",
+                        className="mb-3 mt-2",
+                        external_link=True,
+                    ),
+                    width="auto",
+                )
+            ],
+            justify="start",
+        ),
         dbc.Row(dbc.Col(html.H1("Manage Stocks", className="text-center mb-4"), width=12)),
 
         # Add / update new stock
@@ -148,6 +163,15 @@ dash.register_page(
                                     style_header={"backgroundColor": "#1f2c3b", "fontWeight": "bold"},
                                     style_data={"backgroundColor": "#11181f"},
                                     style_data_conditional=[
+                                        {
+                                            "if": {"filter_query": "{ticker} = 'TOTAL'"},
+                                            "backgroundColor": "#1a242f",
+                                            "fontWeight": "bold",
+                                        },
+                                        {
+                                            "if": {"filter_query": "{ticker} = 'TOTAL'"},
+                                            "pointerEvents": "none",
+                                        },
                                         {
                                             "if": {
                                                 "filter_query": "{gain_loss} > 0",
