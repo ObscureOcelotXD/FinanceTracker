@@ -94,7 +94,22 @@ def _historical_chart(df, tickers, chart_type, start_date, end_date):
         title="Historical Prices",
         labels={"closing_price": "Price", "date": "Date"},
     )
-    fig.update_layout(margin=dict(l=20, r=20, t=50, b=20), template="plotly_dark")
+    y_min = df["closing_price"].min()
+    y_max = df["closing_price"].max()
+    if pd.notna(y_min) and pd.notna(y_max) and y_min != y_max:
+        pad = (y_max - y_min) * 0.05
+        y_range = [y_min - pad, y_max + pad]
+    else:
+        y_range = None
+    fig.update_traces(line={"width": 2})
+    fig.update_layout(
+        margin=dict(l=20, r=20, t=50, b=20),
+        template="plotly_dark",
+        height=620,
+        legend_title_text="",
+    )
+    if y_range:
+        fig.update_yaxes(range=y_range)
     return fig
 
 # Combined callback to update value bar and pie charts
@@ -109,6 +124,17 @@ def _historical_chart(df, tickers, chart_type, start_date, end_date):
 def update_value_graphs(n_intervals, store_data, value_chart_type, allocation_chart_type):
     df = db_manager.get_value_stocks()
     return _value_chart(df, value_chart_type), _allocation_chart(df, allocation_chart_type)
+
+
+@dash_app.callback(
+    Output("total-net-worth-banner", "children"),
+    Input("interval-component", "n_intervals"),
+    Input("stocks-store-display", "data"),
+)
+def update_total_net_worth(n_intervals, store_data):
+    df = db_manager.get_value_stocks()
+    total_value = df["position_value"].sum() if not df.empty else 0
+    return f"Total stock value: ${total_value:,.2f}"
 
 # 2. Add a new callback (or extend existing one) that reacts to the button
 @dash_app.callback(
@@ -157,6 +183,26 @@ layout = html.Div(
                 "marginBottom": "20px",
                 "fontFamily": "Arial, sans-serif",
             },
+        ),
+        dbc.Row(
+            [
+                dbc.Col(
+                    dbc.Alert(
+                        id="total-net-worth-banner",
+                        color="warning",
+                        className="text-center",
+                        style={
+                            "fontSize": "1.6rem",
+                            "fontWeight": 700,
+                            "color": "#1fa24a",
+                            "backgroundColor": "#d4af37",
+                            "borderColor": "#b8902f",
+                        },
+                    ),
+                    width=12,
+                )
+            ],
+            className="mb-3",
         ),
         dbc.Row(
             [
@@ -306,7 +352,11 @@ layout = html.Div(
                                         ],
                                         className="mb-3",
                                     ),
-                                    dcc.Graph(id="stocks-historical-chart"),
+                                    dcc.Graph(
+                                        id="stocks-historical-chart",
+                                        style={"height": "540px"},
+                                        config={"displayModeBar": False},
+                                    ),
                                 ]
                             ),
                         ],
