@@ -1,5 +1,5 @@
-from flask import Flask, render_template, jsonify, request
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify, request, make_response
+import os
 import logging
 import api.alpha_api as av
 # import finnhub_api as finn
@@ -8,24 +8,33 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-app = Flask(__name__)
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, template_folder=os.path.join(_BASE_DIR, "templates"), static_folder=os.path.join(_BASE_DIR, "static"))
 app.config["DEBUG"] = True
 
 
 @app.route('/')
 def index():
-    return render_template('index.html')  # Serve the HTML page
+    resp = make_response(render_template('index.html'))  # Serve the HTML page
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 def create_flask_app():
     # Configure logging
     logging.basicConfig(level=logging.DEBUG)
 
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder=os.path.join(_BASE_DIR, "templates"), static_folder=os.path.join(_BASE_DIR, "static"))
+    
+    # Disable template caching
+    app.config['TEMPLATES_AUTO_RELOAD'] = True
+    app.jinja_env.auto_reload = True
 
     @app.route('/')
     def index():
-        return render_template('index.html')
+        resp = make_response(render_template('index.html'))
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
 
     
 

@@ -21,7 +21,6 @@ dash_app.layout = html.Div([
     dcc.Location(id="url", refresh=False),
     dbc.NavbarSimple(
     children=[        
-        dbc.NavLink("Accounts", href="/dashboard/accounts_dash", active="exact"),
         dbc.NavLink("Display", href=" /dashboard/stocks_dash", active="exact"),
         dbc.NavLink("Manage Stocks", href="/dashboard/stocks_manage", active="exact")
     ],

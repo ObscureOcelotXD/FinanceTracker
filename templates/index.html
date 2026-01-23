@@ -1,122 +1,138 @@
 <!DOCTYPE html>
+  <!-- TEMPLATE VERSION: neon-v2 -->
 <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>Plaid Integration</title>
+        <title>FinanceTracker</title>
         <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/darkly/bootstrap.min.css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
         <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/index.css') }}">
         
     </head>
     <body>
-        <div class="container">
-          <!-- First Card: Plaid Integration & Dashboard -->
-          <div class="card">
-            <h1>Plaid Integration</h1>
-            <p>Click the button below to connect a bank account:</p>
-            <button id="linkButton">Connect a bank account</button>
-            <hr>
-            <h1>Account Dashboard</h1>
-            <p>View your financial account metrics:</p>
-            <button onclick="window.location.href='/dashboard/accounts_dash'">View Metrics</button>
-            
-            <h1>Stock Dashboard</h1>
-            <p>View your stocks across all accounts:</p>
-            <button onclick="window.location.href='/dashboard/stocks_dash/'">View Stocks</button>
-          </div>
-          
-          <!-- Second Card: Alpha Vantage Data -->
-          <div id="AlphaVantageData" class="card">
-            <h1>Alpha Vantage Data</h1>
+        <div class="container py-4">
+          <div class="d-flex align-items-center justify-content-between mb-4">
             <div>
-              <h2>S&P 500: <span id="sp500-value">Loading...</span></h2>
-              <h2>BTC: <span id="btc-value">Loading...</span></h2>
-            </div>
-            <hr>
-            <div>
-              <h2>Get Stock Price</h2>
-              <input type="text" id="tickerInput" placeholder="e.g., NVDA">
-              <button id="fetchTickerBtn">Get Price</button>
-              <p>Price: <span id="tickerPrice">N/A</span></p>
-            </div>
-            <hr>
-            <div>
-              <h2>Get Crypto Price</h2>
-              <input type="text" id="cryptoInput" placeholder="Enter crypto ticker (e.g., ETH)">
-              <button id="fetchCryptoBtn">Get Crypto Price</button>
-              <p>Crypto Price: <span id="cryptoPrice">N/A</span></p>
-            </div>
-          </div>
-          
-          <div class="card" id="FinnhubStockData">
-            <h1>Finnhub Stock Data</h1>
-            <div>
-              <h2>S&P 500 (SPY): <span id="finnhub-value">Loading...</span></h2>
-            </div>
-            <hr>
-            <h2>Get Stock Price</h2>
-            <input type="text" id="finnTickerInput" placeholder="e.g., NVDA">
-            <button id="finnFetchTickerBtn">Get Price</button>
-            <p>Stock Price: <span id="finnTickerPrice">N/A</span></p>
-          </div>
-
-          <div class="card" id="coingeckoCryptoData">
-            <h1>Coin Gecko Crypto Data</h1>
-            <h2>BTC: <span id="coingecko-btc-value">Loading...</span></h2>
-            <hr>
-            <h2>Get Crypto Price</h2>
-            <input type="text" id="geckoCryptoInput" placeholder="e.g., ETH">
-            <button id="geckoFetchCryptoBtn">Get Crypto Price</button>
-            <p>Crypto Price: <span id="geckoCryptoPrice">N/A</span></p>
-            
-            
-          </div>
-
-        </div>
-        <div class="container">
-          <div class="card" id="umbrelMetrics">
-            <h1>Umbrel Node Metrics</h1>
-            <div>
-              <h2>Block Count: <span id="blockcount">Loading...</span></h2>
-              <h2>Network Hash Rate: <span id="networkhashps">Loading...</span></h2>
-              <h2>Mempool Txns: <span id="mempoolinfo">Loading...</span></h2>
-              <h2>Fee Estimate (6 blocks): <span id="estimatesmartfee">Loading...</span></h2>
+              <h1 class="h3 mb-1">FinanceTracker</h1>
+              <p class="text-secondary mb-0">Dark finance dashboard</p>
             </div>
           </div>
 
-          <div class="card" id="umbrelLightningMetrics">
-            <h1>Umbrel Lightning Metrics</h1>
-            <div>
-              <h2>Node Alias: <span id="lightningAlias">Loading...</span></h2>
-              <h2>Block Height: <span id="lightningBlockHeight">Loading...</span></h2>
-              <h2>Active Channels: <span id="lightningChannels">Loading...</span></h2>
+          <div class="row g-4">
+            <div class="col-12 col-lg-5">
+              <div class="neon-panel neon-green h-100" id="stocksCard">
+                <div class="neon-body">
+                  <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div>
+                      <h2 class="h4 mb-1">Stocks</h2>
+                      <p class="text-secondary mb-0">Track positions, value, and performance.</p>
+                    </div>
+                    <div class="fs-3 text-success">
+                      <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="d-flex align-items-center gap-3 mb-3 bull-bear-actions">
+                    <img src="{{ url_for('static', filename='images/bull-bear.gif') }}" alt="Bull and bear" class="bull-bear-gif">
+                    <button class="btn btn-success bull-bear-btn" onclick="window.location.href='/dashboard/stocks_dash/'">
+                      <i class="bi bi-bar-chart-line me-2"></i>View Stocks
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-12 col-lg-7">
+              <div class="neon-panel neon-yellow h-100" id="cryptoCorner">
+                <div class="neon-body">
+                  <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div>
+                      <h2 class="h4 mb-1">Crypto Corner</h2>
+                      <p class="text-secondary mb-0">Umbrel node health & Lightning status.</p>
+                    </div>
+                    <div class="fs-3 text-warning">
+                      <i class="bi bi-currency-bitcoin"></i>
+                      <i class="bi bi-coin ms-1"></i>
+                    </div>
+                  </div>
+
+                  <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                      <div class="metric-tile">
+                        <div class="metric-label">Block Count</div>
+                        <div class="metric-value" id="blockcount">Loading...</div>
+                      </div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <div class="metric-tile">
+                        <div class="metric-label">Network Hash Rate</div>
+                        <div class="metric-value" id="networkhashps">Loading...</div>
+                      </div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <div class="metric-tile">
+                        <div class="metric-label">Mempool Txns</div>
+                        <div class="metric-value" id="mempoolinfo">Loading...</div>
+                      </div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <div class="metric-tile">
+                        <div class="metric-label">Fee Estimate (6 blocks)</div>
+                        <div class="metric-value" id="estimatesmartfee">Loading...</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr class="border-secondary my-4">
+
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h3 class="h5 mb-0">Umbrel Lightning</h3>
+                    <span class="badge bg-warning-subtle text-warning-emphasis">Live</span>
+                  </div>
+                  <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                      <div class="metric-tile">
+                        <div class="metric-label">Node Alias</div>
+                        <div class="metric-value" id="lightningAlias">Loading...</div>
+                      </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <div class="metric-tile">
+                        <div class="metric-label">Block Height</div>
+                        <div class="metric-value" id="lightningBlockHeight">Loading...</div>
+                      </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <div class="metric-tile">
+                        <div class="metric-label">Active Channels</div>
+                        <div class="metric-value" id="lightningChannels">Loading...</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-
-          <!-- <div class="card" id="nownodesCard">
-            <h1>NOWNODES ETH Metrics</h1>
-            <div>
-              <h2>Current Block Number: <span id="ethBlockNumber">Loading...</span></h2>
-            </div>
-          </div> -->
-
         </div>
     </body>
 
 
 <script>
 
-    // Initialize Plaid Link
-    document.getElementById('linkButton').onclick = function() {
+    // Initialize Plaid Link (kept for later use)
+    const linkButton = document.getElementById('linkButton');
+    if (linkButton) {
+        linkButton.onclick = function() {
             fetch('/create_link_token', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
                     console.log("📢 Response from Flask:", data); // Debugging
-    
+
                     if (!data.link_token) {
                         console.error("🚨 Error: No link token received!", data);
                         return;
                     }
-    
+
                     const handler = Plaid.create({
                         token: data.link_token,
                         onSuccess: function(public_token, metadata) {
@@ -139,189 +155,203 @@
                         if (err) console.error("Plaid Link Error:", err);
                         }
                     });
-    
+
                     handler.open();
                 })
                 .catch(error => {
                     console.error("🚨 Fetch Error:", error);
                 });
         };
+    }
 </script>
 
 <script>
-    // Fetch the S&P 500 value from the server
-    fetch('/sp500')
-    .then(response => response.json())
-    .then(data => {
-        if (data.sp500) {
-        document.getElementById('sp500-value').innerText = data.sp500;
-        } else {
-        document.getElementById('sp500-value').innerText = "Error fetching data";
-        }
-    })
-    .catch(error => {
-        console.error("Error:", error);
-        document.getElementById('sp500-value').innerText = "Error fetching data";
-    });
+    // Alpha Vantage widget logic (kept for later use)
+    const sp500El = document.getElementById('sp500-value');
+    const btcEl = document.getElementById('btc-value');
+    if (sp500El && btcEl) {
+        fetch('/sp500')
+        .then(response => response.json())
+        .then(data => {
+            if (data.sp500) {
+            sp500El.innerText = data.sp500;
+            } else {
+            sp500El.innerText = "Error fetching data";
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            sp500El.innerText = "Error fetching data";
+        });
 
-    // Fetch BTC value
-    fetch('/btc')
-    .then(response => response.json())
-    .then(data => {
-        if (data.btc) {
-        document.getElementById('btc-value').innerText = data.btc;
-        } else {
-        document.getElementById('btc-value').innerText = "Error fetching data";
-        }
-    })
-    .catch(error => {
-        console.error("Error:", error);
-        document.getElementById('btc-value').innerText = "Error fetching data";
-    });
-
-
-    // Ticker price fetch functionality
-  document.getElementById("fetchTickerBtn").addEventListener("click", function() {
-    const ticker = document.getElementById("tickerInput").value.trim();
-    if (!ticker) {
-      alert("Please enter a ticker symbol.");
-      return;
+        fetch('/btc')
+        .then(response => response.json())
+        .then(data => {
+            if (data.btc) {
+            btcEl.innerText = data.btc;
+            } else {
+            btcEl.innerText = "Error fetching data";
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            btcEl.innerText = "Error fetching data";
+        });
     }
-    fetch('/ticker', {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ticker: ticker })
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.price) {
-        document.getElementById("tickerPrice").innerText = data.price;
-      } else {
-        document.getElementById("tickerPrice").innerText = "Error fetching price";
-        console.error("Error:", data.error);
-      }
-    })
-    .catch(error => {
-      console.error("Fetch error:", error);
-      document.getElementById("tickerPrice").innerText = "Error fetching price";
-    });
-  });
 
-
-      // Crypto price fetch functionality
-  document.getElementById("fetchCryptoBtn").addEventListener("click", function() {
-    const crypto = document.getElementById("cryptoInput").value.trim();
-    if (!crypto) {
-      alert("Please enter a crypto ticker symbol.");
-      return;
+    const fetchTickerBtn = document.getElementById("fetchTickerBtn");
+    if (fetchTickerBtn) {
+        fetchTickerBtn.addEventListener("click", function() {
+            const ticker = document.getElementById("tickerInput").value.trim();
+            if (!ticker) {
+            alert("Please enter a ticker symbol.");
+            return;
+            }
+            fetch('/ticker', {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ticker: ticker })
+            })
+            .then(response => response.json())
+            .then(data => {
+            if (data.price) {
+                document.getElementById("tickerPrice").innerText = data.price;
+            } else {
+                document.getElementById("tickerPrice").innerText = "Error fetching price";
+                console.error("Error:", data.error);
+            }
+            })
+            .catch(error => {
+            console.error("Fetch error:", error);
+            document.getElementById("tickerPrice").innerText = "Error fetching price";
+            });
+        });
     }
-    fetch('/crypto', {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ticker: crypto })
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.price) {
-        document.getElementById("cryptoPrice").innerText = data.price;
-      } else {
-        document.getElementById("cryptoPrice").innerText = "Error fetching price";
-      }
-    })
-    .catch(error => {
-      console.error("Crypto fetch error:", error);
-      document.getElementById("cryptoPrice").innerText = "Error fetching price";
-    });
-  });
+
+    const fetchCryptoBtn = document.getElementById("fetchCryptoBtn");
+    if (fetchCryptoBtn) {
+        fetchCryptoBtn.addEventListener("click", function() {
+            const crypto = document.getElementById("cryptoInput").value.trim();
+            if (!crypto) {
+            alert("Please enter a crypto ticker symbol.");
+            return;
+            }
+            fetch('/crypto', {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ticker: crypto })
+            })
+            .then(response => response.json())
+            .then(data => {
+            if (data.price) {
+                document.getElementById("cryptoPrice").innerText = data.price;
+            } else {
+                document.getElementById("cryptoPrice").innerText = "Error fetching price";
+            }
+            })
+            .catch(error => {
+            console.error("Crypto fetch error:", error);
+            document.getElementById("cryptoPrice").innerText = "Error fetching price";
+            });
+        });
+    }
 </script>
 
 <script>
-    // Fetch Finnhub data from our endpoint and update the card
-    fetch('/finnhub')
-      .then(response => response.json())
-      .then(data => {
-        if(data.price){
-          document.getElementById('finnhub-value').innerText = data.price;
-        } else {
-          document.getElementById('finnhub-value').innerText = "Error fetching data";
+    // Finnhub widget logic (kept for later use)
+    const finnhubValue = document.getElementById('finnhub-value');
+    if (finnhubValue) {
+        fetch('/finnhub')
+        .then(response => response.json())
+        .then(data => {
+            if(data.price){
+            finnhubValue.innerText = data.price;
+            } else {
+            finnhubValue.innerText = "Error fetching data";
+            }
+        })
+        .catch(error => {
+            console.error("Finnhub fetch error:", error);
+            finnhubValue.innerText = "Error fetching data";
+        });
+    }
+
+    const finnhubBtn = document.getElementById("finnFetchTickerBtn");
+    if (finnhubBtn) {
+        finnhubBtn.addEventListener("click", function() {
+        const ticker = document.getElementById("finnTickerInput").value.trim();
+        if (!ticker) {
+            alert("Please enter a stock ticker symbol.");
+            return;
         }
-      })
-      .catch(error => {
-        console.error("Finnhub fetch error:", error);
-        document.getElementById('finnhub-value').innerText = "Error fetching data";
-      });
+        fetch('/stock', {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ticker: ticker })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.price) {
+            document.getElementById("finnTickerPrice").innerText = data.price;
+            } else {
+            document.getElementById("finnTickerPrice").innerText = "Error fetching data";
+            }
+        })
+        .catch(error => {
+            console.error("Stock fetch error:", error);
+            document.getElementById("finnTickerPrice").innerText = "Error fetching data";
+        });
+        });
+    }
 
 
-
-          // Stock price fetch
-    document.getElementById("finnFetchTickerBtn").addEventListener("click", function() {
-      const ticker = document.getElementById("finnTickerInput").value.trim();
-      if (!ticker) {
-        alert("Please enter a stock ticker symbol.");
-        return;
-      }
-      fetch('/stock', {
+const geckoBtcValue = document.getElementById("coingecko-btc-value");
+if (geckoBtcValue) {
+    fetch('/coingeckoBtc', {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker: ticker })
-      })
-      .then(response => response.json())
-      .then(data => {
+        body: JSON.stringify({})  // No ticker needed since it's hardcoded to BTC
+    })
+    .then(response => response.json())
+    .then(data => {
         if (data.price) {
-          document.getElementById("finnTickerPrice").innerText = data.price;
+            console.log("BTC Price:", data.price);
+            geckoBtcValue.innerText = data.price;
         } else {
-          document.getElementById("finnTickerPrice").innerText = "Error fetching data";
+            console.error("Error:", data.error);
         }
-      })
-      .catch(error => {
-        console.error("Stock fetch error:", error);
-        document.getElementById("finnTickerPrice").innerText = "Error fetching data";
-      });
-    });
+    })
+    .catch(error => console.error("Fetch error:", error));
+}
 
-
-fetch('/coingeckoBtc', {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({})  // No ticker needed since it's hardcoded to BTC
-})
-.then(response => response.json())
-.then(data => {
-    if (data.price) {
-        console.log("BTC Price:", data.price);
-        document.getElementById("coingecko-btc-value").innerText = data.price;
-    } else {
-        console.error("Error:", data.error);
-    }
-})
-.catch(error => console.error("Fetch error:", error));
-
-
-document.getElementById("geckoFetchCryptoBtn").addEventListener("click", function() {
-      const ticker = document.getElementById("geckoCryptoInput").value.trim();
-      if (!ticker) {
+const geckoBtn = document.getElementById("geckoFetchCryptoBtn");
+if (geckoBtn) {
+    geckoBtn.addEventListener("click", function() {
+        const ticker = document.getElementById("geckoCryptoInput").value.trim();
+        if (!ticker) {
         alert("Please enter a crypto ticker symbol.");
         return;
-      }
-      fetch('/coingecko', {
+        }
+        fetch('/coingecko', {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker: ticker })
-      })
-      .then(response => response.json())
-      .then(data => {
+        })
+        .then(response => response.json())
+        .then(data => {
         if (data.price) {
-          document.getElementById("geckoCryptoPrice").innerText = data.price;
+            document.getElementById("geckoCryptoPrice").innerText = data.price;
         } else {
-          document.getElementById("geckoCryptoPrice").innerText = "Error fetching data";
-          console.error("Crypto fetch error:", data.error);
+            document.getElementById("geckoCryptoPrice").innerText = "Error fetching data";
+            console.error("Crypto fetch error:", data.error);
         }
-      })
-      .catch(error => {
+        })
+        .catch(error => {
         console.error("Crypto fetch error:", error);
         document.getElementById("geckoCryptoPrice").innerText = "Error fetching data";
-      });
+        });
     });
+}
 
 
 

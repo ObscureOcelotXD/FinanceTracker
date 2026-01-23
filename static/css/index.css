@@ -1,59 +1,85 @@
 
-            /* Global Styles */
+            /* Global Styles (Bootstrap Darkly overrides) */
             body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 20px;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            background-color: #0f1115;
             }
-            .container {
-            display: flex;
-            flex-wrap: wrap;
+            .neon-panel {
+            border-radius: 16px;
+            border: 1px solid #1f2937;
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.03),
+                0 10px 30px rgba(0,0,0,0.45);
+            background-color: #111827;
+            }
+            .neon-panel.neon-green {
+            background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(15,23,42,1));
+            border-color: rgba(16,185,129,0.35);
+            box-shadow:
+                0 0 18px rgba(16,185,129,0.25),
+                0 10px 30px rgba(0,0,0,0.45);
+            }
+            .neon-panel.neon-yellow {
+            background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(15,23,42,1));
+            border-color: rgba(245,158,11,0.35);
+            box-shadow:
+                0 0 18px rgba(245,158,11,0.25),
+                0 10px 30px rgba(0,0,0,0.45);
+            }
+            .neon-body {
+            padding: 1.25rem;
+            backdrop-filter: blur(6px);
+            }
+            .neon-panel .h4,
+            .neon-panel .metric-value {
+            color: #e5e7eb;
+            }
+            .neon-panel .text-secondary {
+            color: #9ca3af !important;
+            }
+            .metric-tile {
+            background: #111827;
+            border: 1px solid #1f2937;
+            border-radius: 10px;
+            padding: 12px 14px;
+            }
+            .metric-label {
+            color: #9ca3af;
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+            }
+            .metric-value {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #e5e7eb;
+            }
+            .badge-icon {
+            display: inline-block;
+            filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.35));
+            }
+            .badge-icon svg {
+            width: 18px;
+            height: 18px;
+            }
+            .bull-bear-gif {
+            width: var(--bb-size, 140px);
+            height: var(--bb-size, 140px);
+            object-fit: cover;
+            border-radius: 12px;
+            box-shadow: 0 0 16px rgba(16, 185, 129, 0.25);
+            }
+            .bull-bear-actions {
+            justify-content: space-between;
+            width: 100%;
+            padding: 0 10px;
+            }
+            .bull-bear-btn {
+            width: 130px;
+            height: 130px;
+            display: inline-flex;
+            align-items: center;
             justify-content: center;
-            gap: 20px;
-            }
-            .card {
-            background-color: #fff;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            padding: 20px;
-            width: 320px;
-            text-align: center;
-            }
-            .card h1 {
-            font-size: 1.5em;
-            margin: 0 0 10px;
-            }
-            .card h2 {
-            font-size: 1.2em;
-            margin: 10px 0;
-            }
-            .card p {
-            font-size: 1em;
-            margin: 10px 0;
-            }
-            .card input[type="text"] {
-            width: 80%;
             padding: 8px;
-            margin-bottom: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            }
-            .card button {
-            background-color: #007bff;
-            border: none;
-            color: #fff;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1em;
-            }
-            .card button:hover {
-            background-color: #0056b3;
-            }
-            hr {
-            border: none;
-            border-top: 1px solid #eee;
-            margin: 20px 0;
+            line-height: 1;
+            box-sizing: border-box;
             }
