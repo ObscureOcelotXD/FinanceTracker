@@ -4,6 +4,7 @@ from dash import html, dcc, Input, Output, State, get_app
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import pandas as pd
+import datetime as dt
 import db_manager
 
 # Register page
@@ -145,6 +146,7 @@ def update_total_net_worth(n_intervals, store_data):
     Output("force-update-btn", "children"),
     Output("force-update-btn", "disabled"),
     Output("force-update-timer", "disabled"),
+    Output("force-update-loading-target", "children"),
     Input("force-update-btn", "n_clicks"),
     State("stocks-store-display", "data"),
     prevent_initial_call=True,
@@ -152,15 +154,15 @@ def update_total_net_worth(n_intervals, store_data):
 def force_update_table(n_clicks, current_counter):
     print(f"Callback triggered! n_clicks: {n_clicks}, current_counter: {current_counter}")
     if n_clicks is None:
-        return False, "", False, "info", "Force Update Table", False, True
+        return False, "", False, "info", "Force Update Table", False, True, ""
     # Call the update function with forceUpdate=True
     try:
         from api.finnhub_api import update_stock_prices
         update_stock_prices(forceUpdate=True)
         # Just increment the counter → this will trigger your existing load_stocks_table callback
-        return (current_counter or 0) + 1, "Prices updated.", True, "success", "Force Update Table", False, False
+        return (current_counter or 0) + 1, "Prices F*cking Updated!", True, "danger", "Force Update Table", False, False, dt.datetime.utcnow().isoformat()
     except Exception as exc:
-        return dash.no_update, f"Update failed: {exc}", True, "danger", "Force Update Table", False, False
+        return dash.no_update, f"Update failed: {exc}", True, "danger", "Force Update Table", False, False, dt.datetime.utcnow().isoformat()
     
     
 # Page layout
@@ -176,6 +178,7 @@ _ticker_options = (
 
 layout = html.Div(
     [
+        html.Div(id="force-update-loading-target"),
         dbc.Row(
             [
                 dbc.Col(
@@ -205,13 +208,13 @@ layout = html.Div(
                     dbc.Alert(
                         id="total-net-worth-banner",
                         color="warning",
-                        className="text-center",
+                        className="text-center neon-panel neon-yellow",
                         style={
-                            "fontSize": "1.6rem",
+                            "fontSize": "1.4rem",
                             "fontWeight": 700,
                             "color": "#1fa24a",
-                            "backgroundColor": "#d4af37",
-                            "borderColor": "#b8902f",
+                            "backgroundColor": "transparent",
+                            "borderColor": "rgba(245,158,11,0.35)",
                         },
                     ),
                     width=12,
@@ -222,14 +225,11 @@ layout = html.Div(
         dbc.Row(
             [
                 dbc.Col(
-                    dcc.Loading(
-                        dbc.Button(
-                            "Force Update Table",
-                            id="force-update-btn",
-                            color="info",
-                            className="mt-3",
-                        ),
-                        type="circle",
+                    dbc.Button(
+                        "Force Update Table",
+                        id="force-update-btn",
+                        color="info",
+                        className="mt-3 neon-danger-btn",
                     ),
                     width="auto",
                 )
@@ -256,9 +256,19 @@ layout = html.Div(
                 dbc.Col(
                     dbc.Card(
                         [
-                            dbc.CardHeader("Value Charts"),
                             dbc.CardBody(
                                 [
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                [
+                                                    html.Div("Value Charts", className="neon-title"),
+                                                    html.Div("Portfolio value and allocation", className="neon-subtitle"),
+                                                ]
+                                            ),
+                                        ],
+                                        className="neon-card-header",
+                                    ),
                                     dbc.Row(
                                         [
                                             dbc.Col(
@@ -305,7 +315,7 @@ layout = html.Div(
                                 ]
                             ),
                         ],
-                        className="mb-4",
+                        className="mb-4 neon-panel neon-green",
                     ),
                     width=12,
                 )
@@ -316,9 +326,19 @@ layout = html.Div(
                 dbc.Col(
                     dbc.Card(
                         [
-                            dbc.CardHeader("Historical Prices"),
                             dbc.CardBody(
                                 [
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                [
+                                                    html.Div("Historical Prices", className="neon-title"),
+                                                    html.Div("Filter and compare performance", className="neon-subtitle"),
+                                                ]
+                                            ),
+                                        ],
+                                        className="neon-card-header",
+                                    ),
                                     dbc.Row(
                                         [
                                             dbc.Col(
@@ -375,7 +395,7 @@ layout = html.Div(
                                 ]
                             ),
                         ],
-                        className="mb-4",
+                        className="mb-4 neon-panel neon-yellow",
                     ),
                     width=12,
                 )

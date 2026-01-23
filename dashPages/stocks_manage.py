@@ -35,9 +35,19 @@ dash.register_page(
             dbc.Col(
                 dbc.Card(
                     [
-                        dbc.CardHeader(html.H4("Add or Update")),
                         dbc.CardBody(
                             [
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            [
+                                                html.Div("Add or Update", className="neon-title"),
+                                                html.Div("Manage positions and cost basis", className="neon-subtitle"),
+                                            ]
+                                        ),
+                                    ],
+                                    className="neon-card-header",
+                                ),
                                 dbc.Row(
                                     [
                                         dbc.Col(
@@ -86,7 +96,7 @@ dash.register_page(
                             ]
                         ),
                     ],
-                    className="mb-4",
+                    className="mb-4 neon-panel neon-green",
                 ),
                 width={"size": 6, "offset": 3}
             )
@@ -97,9 +107,19 @@ dash.register_page(
             dbc.Col(
                 dbc.Card(
                     [
-                        dbc.CardHeader(html.H4("Stocks")),
                         dbc.CardBody(
                             [
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            [
+                                                html.Div("Stocks", className="neon-title"),
+                                                html.Div("Holdings, performance, and edits", className="neon-subtitle"),
+                                            ]
+                                        ),
+                                    ],
+                                    className="neon-card-header",
+                                ),
                                 html.Button(id="clear-active-cell-btn", style={"display": "none"}),
                                 dbc.Row(
                                     [
@@ -266,7 +286,7 @@ dash.register_page(
                             ]
                         ),
                     ],
-                    className="mb-4",
+                    className="mb-4 neon-panel neon-yellow",
                 ),
                 width={"size": 8, "offset": 2}
             )

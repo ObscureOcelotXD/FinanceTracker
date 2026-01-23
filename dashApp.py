@@ -19,14 +19,43 @@ dash_app = Dash(
 # Update the layout to use container cards for each graph
 dash_app.layout = html.Div([
     dcc.Location(id="url", refresh=False),
-    dbc.NavbarSimple(
-    children=[        
-        dbc.NavLink("Display", href=" /dashboard/stocks_dash", active="exact"),
-        dbc.NavLink("Manage Stocks", href="/dashboard/stocks_manage", active="exact")
-    ],
-    brand="Stocks App",
+    dbc.Navbar(
+    dbc.Container(
+        [
+            dbc.NavbarBrand(
+                [html.I(className="bi bi-graph-up-arrow me-2"), "Stocks App"],
+                className="fw-semibold text-light",
+            ),
+            dbc.Nav(
+                [
+                    dbc.NavLink(
+                        [
+                            html.I(className="bi bi-activity nav-icon"),
+                            html.Span("Display", className="nav-text"),
+                        ],
+                        href="/dashboard/stocks_dash",
+                        active="exact",
+                        className="nav-pill",
+                    ),
+                    dbc.NavLink(
+                        [
+                            html.I(className="bi bi-sliders2-vertical nav-icon"),
+                            html.Span("Manage Stocks", className="nav-text"),
+                        ],
+                        href="/dashboard/stocks_manage",
+                        active="exact",
+                        className="nav-pill",
+                    ),
+                ],
+                className="ms-auto nav-neon-group",
+                navbar=True,
+            ),
+        ],
+        fluid=True,
+    ),
     color="dark",
     dark=True,
+    className="nav-neon",
     ),
     dcc.Interval(id='interval-component', interval=60*1000, n_intervals=0),
     dcc.Store(id="stocks-store", data=0),
