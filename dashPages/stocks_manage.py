@@ -28,7 +28,30 @@ dash.register_page(
             ],
             justify="start",
         ),
-        dbc.Row(dbc.Col(html.H1("Manage Stocks", className="text-center mb-4"), width=12)),
+        dbc.Row(dbc.Col(html.H1("Manage Stocks", className="text-center mb-2"), width=12)),
+        dbc.Row(
+            dbc.Col(
+                dbc.ButtonGroup(
+                    [
+                        dbc.Button(
+                            "Unrealized",
+                            href="/dashboard/stocks_manage",
+                            color="primary",
+                            className="px-4",
+                        ),
+                        dbc.Button(
+                            "Realized",
+                            href="/dashboard/stocks_realized",
+                            color="secondary",
+                            className="px-4",
+                        ),
+                    ],
+                    className="mb-3",
+                ),
+                width="auto",
+            ),
+            justify="center",
+        ),
 
         # Add / update new stock
         dbc.Row(
@@ -146,6 +169,8 @@ dash.register_page(
                                 ),
                                 dash_table.DataTable(
                                     id="stocks-table",
+                                    editable=True,
+                                    cell_selectable=True,
                                     row_deletable=False,
                                     row_selectable="single",
                                     columns=[
@@ -283,6 +308,16 @@ dash.register_page(
                                     justify="start",
                                 ),
                                 dbc.Alert(id="edit-feedback", color="warning", is_open=False, className="mt-2"),
+                                dbc.Toast(
+                                    "Saved",
+                                    id="edit-save-toast",
+                                    header="Auto-save",
+                                    is_open=False,
+                                    duration=2000,
+                                    dismissable=True,
+                                    icon="success",
+                                    className="mt-2",
+                                ),
                             ]
                         ),
                     ],
@@ -329,25 +364,32 @@ def add_stock(n_clicks, ticker, shares, cost_basis, store_data):
 @dash.callback(
     [Output("stocks-store", "data", allow_duplicate=True),
      Output("edit-feedback", "children", allow_duplicate=True),
-     Output("edit-feedback", "is_open", allow_duplicate=True)],
-    [Input('stocks-table', 'data_previous'),
+     Output("edit-feedback", "is_open", allow_duplicate=True),
+     Output("edit-save-toast", "is_open", allow_duplicate=True)],
+    [Input('stocks-table', 'data_timestamp'),
      Input('update-shares-btn', 'n_clicks')],
-    [State('stocks-table', 'data'),
+    [State('stocks-table', 'data_previous'),
+     State('stocks-table', 'data'),
      State('stocks-table', 'selected_rows'),
      State('edit-shares-input', 'value'),
      State('edit-cost-basis-input', 'value'),
      State('stocks-store', 'data')],
     prevent_initial_call=True
 )
-def sync_modify(prev, n_clicks_btn, current, selected_rows, new_shares, new_cost_basis, store_data):
+def sync_modify(data_ts, n_clicks_btn, prev, current, selected_rows, new_shares, new_cost_basis, store_data):
     triggered = ctx.triggered_id
     # deletion or inline change
     if prev is not None and triggered == 'stocks-table':
-        prev_ids = {r['id'] for r in prev}
-        curr_ids = {r['id'] for r in current}
+        prev_rows = [r for r in prev if r.get('ticker') != 'TOTAL' and r.get('id') is not None]
+        curr_rows = [r for r in current if r.get('ticker') != 'TOTAL' and r.get('id') is not None]
+        prev_ids = {r['id'] for r in prev_rows}
+        curr_ids = {r['id'] for r in curr_rows}
         deleted = prev_ids - curr_ids
-        edited = [(old, new) for old, new in zip(prev, current)
-                  if old.get('shares') != new.get('shares') or old.get('cost_basis') != new.get('cost_basis')]
+        edited = [
+            (old, new)
+            for old, new in zip(prev_rows, curr_rows)
+            if old.get('shares') != new.get('shares') or old.get('cost_basis') != new.get('cost_basis')
+        ]
         if deleted:
             for sid in deleted:
                 db_manager.delete_stock(sid)
@@ -361,11 +403,11 @@ def sync_modify(prev, n_clicks_btn, current, selected_rows, new_shares, new_cost
                 )
         if not deleted and not edited:
             raise PreventUpdate
-        return (store_data or 0) + 1, "", False
+        return (store_data or 0) + 1, "", False, True
     # update via numeric input and button
     elif triggered == 'update-shares-btn':
         if not selected_rows or (new_shares is None and new_cost_basis is None):
-            return dash.no_update, "Select a row and enter valid values.", True
+            return dash.no_update, "Select a row and enter valid values.", True, False
         row = current[selected_rows[0]]
         try:
             db_manager.update_stock(
@@ -375,9 +417,9 @@ def sync_modify(prev, n_clicks_btn, current, selected_rows, new_shares, new_cost
                 cost_basis=new_cost_basis,
             )
             msg = f"Updated {row['ticker']}."
-            return (store_data or 0) + 1, msg, True
+            return (store_data or 0) + 1, msg, True, True
         except Exception as e:
-            return dash.no_update, f"Error: {e}", True
+            return dash.no_update, f"Error: {e}", True, False
     else:
         raise PreventUpdate
 

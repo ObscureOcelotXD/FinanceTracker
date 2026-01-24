@@ -142,6 +142,23 @@ def init_db():
         )
     """)
 
+    cur8 = con.cursor()
+    cur8.execute("""
+        CREATE TABLE IF NOT EXISTS realized_gains (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            shares REAL NOT NULL,
+            buy_date TEXT,
+            sell_date TEXT,
+            proceeds REAL NOT NULL,
+            cost_basis REAL NOT NULL,
+            fees REAL,
+            realized_gain REAL,
+            realized_gain_pct REAL,
+            tax_year INTEGER NOT NULL
+        )
+    """)
+
     con.commit()
     con.close()
 
@@ -487,6 +504,148 @@ def delete_stock(stock_id):
     cur.execute("DELETE FROM Stocks WHERE id = ?", (stock_id,))
     conn.commit()
     conn.close()
+
+
+def _compute_realized_gain(proceeds, cost_basis, fees):
+    proceeds_val = float(proceeds) if proceeds is not None else 0.0
+    cost_val = float(cost_basis) if cost_basis is not None else 0.0
+    fees_val = float(fees) if fees is not None else 0.0
+    gain = proceeds_val - cost_val - fees_val
+    gain_pct = gain / cost_val if cost_val else None
+    return gain, gain_pct
+
+
+def insert_realized_gain(
+    ticker,
+    shares,
+    proceeds,
+    cost_basis,
+    fees=None,
+    buy_date=None,
+    sell_date=None,
+    tax_year=None,
+):
+    gain, gain_pct = _compute_realized_gain(proceeds, cost_basis, fees)
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO realized_gains
+            (ticker, shares, buy_date, sell_date, proceeds, cost_basis, fees, realized_gain, realized_gain_pct, tax_year)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            ticker,
+            shares,
+            buy_date,
+            sell_date,
+            proceeds,
+            cost_basis,
+            fees,
+            gain,
+            gain_pct,
+            tax_year,
+        ),
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return new_id
+
+
+def update_realized_gain(
+    gain_id,
+    ticker=None,
+    shares=None,
+    proceeds=None,
+    cost_basis=None,
+    fees=None,
+    buy_date=None,
+    sell_date=None,
+    tax_year=None,
+):
+    fields = []
+    params = []
+    if ticker is not None:
+        fields.append("ticker = ?")
+        params.append(ticker)
+    if shares is not None:
+        fields.append("shares = ?")
+        params.append(shares)
+    if buy_date is not None:
+        fields.append("buy_date = ?")
+        params.append(buy_date)
+    if sell_date is not None:
+        fields.append("sell_date = ?")
+        params.append(sell_date)
+    if proceeds is not None:
+        fields.append("proceeds = ?")
+        params.append(proceeds)
+    if cost_basis is not None:
+        fields.append("cost_basis = ?")
+        params.append(cost_basis)
+    if fees is not None:
+        fields.append("fees = ?")
+        params.append(fees)
+    if tax_year is not None:
+        fields.append("tax_year = ?")
+        params.append(tax_year)
+
+    recompute = proceeds is not None or cost_basis is not None or fees is not None
+    if recompute:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT proceeds, cost_basis, fees FROM realized_gains WHERE id = ?",
+            (gain_id,),
+        )
+        row = cur.fetchone()
+        conn.close()
+        current_proceeds = row[0] if row else 0.0
+        current_cost_basis = row[1] if row else 0.0
+        current_fees = row[2] if row else 0.0
+        gain, gain_pct = _compute_realized_gain(
+            proceeds if proceeds is not None else current_proceeds,
+            cost_basis if cost_basis is not None else current_cost_basis,
+            fees if fees is not None else current_fees,
+        )
+        fields.append("realized_gain = ?")
+        params.append(gain)
+        fields.append("realized_gain_pct = ?")
+        params.append(gain_pct)
+
+    if not fields:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    params.append(gain_id)
+    cur.execute(f"UPDATE realized_gains SET {', '.join(fields)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+
+def delete_realized_gain(gain_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM realized_gains WHERE id = ?", (gain_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_realized_gains(year=None):
+    conn = get_connection()
+    if year:
+        query = "SELECT * FROM realized_gains WHERE tax_year = ?"
+        df = pd.read_sql_query(query, conn, params=[year])
+    else:
+        query = "SELECT * FROM realized_gains"
+        df = pd.read_sql_query(query, conn)
+    conn.close()
+    if df.empty:
+        return df
+    df["realized_gain"] = pd.to_numeric(df["realized_gain"], errors="coerce")
+    df["realized_gain_pct"] = pd.to_numeric(df["realized_gain_pct"], errors="coerce")
+    return df
 
 
 def get_all_tickers():
