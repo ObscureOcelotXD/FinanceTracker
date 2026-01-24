@@ -6,12 +6,19 @@ import concurrent.futures
 import datetime
 from dotenv import load_dotenv
 try:
+    from . import polygon_api
+except Exception:
+    import polygon_api
+try:
     # When running from the project root.
     from db_manager import (
         get_all_tickers,
         upsert_stock_price,
         get_last_update,
         set_last_update,
+        get_sector_map,
+        get_sector_records,
+        upsert_stock_sector,
     )
 except ModuleNotFoundError:
     # When the package is imported as a module (e.g., api.finnhub_api).
@@ -20,6 +27,9 @@ except ModuleNotFoundError:
         upsert_stock_price,
         get_last_update,
         set_last_update,
+        get_sector_map,
+        get_sector_records,
+        upsert_stock_sector,
     )
 
 finnhub_api = Blueprint("finnhub_api", __name__)
@@ -34,6 +44,43 @@ def _get_finnhub_api_key():
     return None
 
 FINNHUB_QUOTE_URL = "https://finnhub.io/api/v1/quote"
+FINNHUB_PROFILE_URL = "https://finnhub.io/api/v1/stock/profile2"
+
+SECTOR_OVERRIDES = {
+    "VTI": "Broad Market",
+    "VTSAX": "Broad Market",
+    "ITOT": "Broad Market",
+    "SCHB": "Broad Market",
+    "SWTSX": "Broad Market",
+    "FSKAX": "Broad Market",
+    "FZROX": "Broad Market",
+    "VOO": "S&P 500",
+    "IVV": "S&P 500",
+    "SPY": "S&P 500",
+    "FXAIX": "S&P 500",
+    "VFIAX": "S&P 500",
+    "SWPPX": "S&P 500",
+    "VTSMX": "Total Stock Market",
+    "VT": "Total World",
+    "VXUS": "Total International",
+    "FTIHX": "Total International",
+    "VTIAX": "Total International",
+    "IXUS": "Total International",
+}
+
+
+GENERIC_SECTORS = {
+    "technology",
+    "unknown",
+    "",
+    None,
+}
+
+
+def _is_generic_sector(value):
+    if value is None:
+        return True
+    return str(value).strip().lower() in GENERIC_SECTORS
 
 def get_stock_quote(symbol):
     url = FINNHUB_QUOTE_URL
@@ -137,6 +184,84 @@ def fetch_stock_prices_batch(tickers):
             ticker, price = future.result()
             batch_prices[ticker] = price
     return batch_prices
+
+def fetch_company_profile(ticker):
+    params = {
+        "symbol": ticker.upper(),
+        "token": _get_finnhub_api_key(),
+    }
+    response = requests.get(FINNHUB_PROFILE_URL, params=params, timeout=15)
+    if response.status_code != 200:
+        print(f"[Finnhub] {ticker} HTTP {response.status_code}: {response.text[:200]}")
+        return {}
+    data = response.json()
+    print(f"[Finnhub] {ticker} profile fetched.")
+    return data
+
+def get_sector_allocation_map(tickers, refresh_days: int = 7, force_refresh: bool = False):
+    cached_records = get_sector_records(tickers)
+    cached = {t: rec.get("sector") for t, rec in cached_records.items()}
+    stale_cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=refresh_days)
+    missing = []
+    if force_refresh:
+        print(f"[Sector] Force refresh enabled for {len(tickers)} tickers.")
+    for t in tickers:
+        t_upper = t.upper()
+        if t_upper in SECTOR_OVERRIDES:
+            sector = SECTOR_OVERRIDES[t_upper]
+            upsert_stock_sector(t_upper, sector, datetime.datetime.utcnow().isoformat())
+            cached[t] = sector
+            continue
+        if force_refresh:
+            missing.append(t)
+            continue
+        rec = cached_records.get(t)
+        if not rec or not rec.get("sector"):
+            missing.append(t)
+            continue
+        try:
+            updated_at = datetime.datetime.fromisoformat(rec.get("updated_at"))
+            if _is_generic_sector(rec.get("sector")):
+                if force_refresh or updated_at < stale_cutoff:
+                    missing.append(t)
+                continue
+            if updated_at < stale_cutoff:
+                missing.append(t)
+        except Exception:
+            missing.append(t)
+    if not missing:
+        print("[Sector] No sector refresh needed.")
+    for ticker in missing:
+        try:
+            ticker_upper = ticker.upper()
+            if ticker_upper in SECTOR_OVERRIDES:
+                sector = SECTOR_OVERRIDES[ticker_upper]
+                upsert_stock_sector(ticker_upper, sector, datetime.datetime.utcnow().isoformat())
+                cached[ticker] = sector
+                continue
+            polygon_sector = polygon_api.get_polygon_industry(ticker_upper)
+            used_polygon = False
+            if polygon_sector and not _is_generic_sector(polygon_sector):
+                sector = polygon_sector
+                used_polygon = True
+                print(f"[Sector] {ticker_upper} -> Polygon: {sector}")
+            else:
+                data = fetch_company_profile(ticker_upper)
+                sector = (
+                    data.get("finnhubIndustry")
+                    or data.get("industry")
+                    or data.get("gicsSubIndustry")
+                    or data.get("gics_sub_industry")
+                    or data.get("sector")
+                    or "Unknown"
+                )
+                print(f"[Sector] {ticker_upper} -> Finnhub: {sector}")
+            upsert_stock_sector(ticker_upper, sector, datetime.datetime.utcnow().isoformat())
+            cached[ticker] = sector
+        except Exception as exc:
+            print(f"[Finnhub] Sector fetch failed for {ticker}: {exc}")
+            cached[ticker] = "Unknown"
+    return cached
 
 def update_stock_prices(forceUpdate: bool = False):
     tickers = get_all_tickers()  # e.g., returns a list like ["AAPL", "MSFT", "GOOG", ...]

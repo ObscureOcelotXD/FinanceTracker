@@ -133,6 +133,14 @@ def init_db():
             last_run_date TEXT NOT NULL
         )
     """)
+    cur7 = con.cursor()
+    cur7.execute("""
+        CREATE TABLE IF NOT EXISTS stock_metadata (
+            ticker TEXT PRIMARY KEY,
+            sector TEXT,
+            updated_at TEXT
+        )
+    """)
 
     con.commit()
     con.close()
@@ -316,6 +324,49 @@ def get_stocks():
     df = pd.read_sql_query(query, conn)
     conn.close()
     return df
+
+def get_sector_map(tickers):
+    if not tickers:
+        return {}
+    conn = get_connection()
+    placeholders = ",".join("?" for _ in tickers)
+    query = f"""
+        SELECT ticker, sector
+        FROM stock_metadata
+        WHERE ticker IN ({placeholders})
+    """
+    df = pd.read_sql_query(query, conn, params=tickers)
+    conn.close()
+    return dict(zip(df["ticker"], df["sector"])) if not df.empty else {}
+
+def get_sector_records(tickers):
+    if not tickers:
+        return {}
+    conn = get_connection()
+    placeholders = ",".join("?" for _ in tickers)
+    query = f"""
+        SELECT ticker, sector, updated_at
+        FROM stock_metadata
+        WHERE ticker IN ({placeholders})
+    """
+    df = pd.read_sql_query(query, conn, params=tickers)
+    conn.close()
+    if df.empty:
+        return {}
+    return {row["ticker"]: {"sector": row["sector"], "updated_at": row["updated_at"]} for _, row in df.iterrows()}
+
+def upsert_stock_sector(ticker, sector, updated_at):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO stock_metadata (ticker, sector, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(ticker) DO UPDATE SET
+            sector = excluded.sector,
+            updated_at = excluded.updated_at
+    """, (ticker, sector, updated_at))
+    conn.commit()
+    conn.close()
 
 def get_duplicate_stocks_df():
     conn = get_connection()

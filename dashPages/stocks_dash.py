@@ -6,6 +6,7 @@ import plotly.express as px
 import pandas as pd
 import datetime as dt
 import db_manager
+from api import finnhub_api
 
 # Register page
 dash.register_page(__name__, path="/stocks_dash", name="Display")
@@ -126,6 +127,35 @@ def update_value_graphs(n_intervals, store_data, value_chart_type, allocation_ch
     df = db_manager.get_value_stocks()
     return _value_chart(df, value_chart_type), _allocation_chart(df, allocation_chart_type)
 
+@dash_app.callback(
+    Output("stocks-sector-chart", "figure"),
+    Input("interval-component", "n_intervals"),
+    Input("stocks-store-display", "data"),
+)
+def update_sector_chart(n_intervals, store_data):
+    df = db_manager.get_value_stocks()
+    if df.empty:
+        return px.pie(title="No Data Available", template="plotly_dark")
+    tickers = df["ticker"].tolist()
+    sector_map = finnhub_api.get_sector_allocation_map(tickers)
+    df["sector"] = df["ticker"].map(sector_map).fillna("Unknown")
+    sector_df = df.groupby("sector", as_index=False)["position_value"].sum()
+    ticker_df = df.groupby("sector")["ticker"].apply(lambda x: ", ".join(sorted(set(x)))).reset_index()
+    sector_df = sector_df.merge(ticker_df, on="sector", how="left")
+    fig = px.pie(
+        sector_df,
+        names="sector",
+        values="position_value",
+        title="Industry Allocation",
+    )
+    fig.update_traces(
+        customdata=sector_df["ticker"],
+        hovertemplate="<b>%{label}</b><br>Value: %{value:$,.2f}<br>Tickers: %{customdata}<extra></extra>",
+        textfont_size=13,
+    )
+    fig.update_layout(margin=dict(l=20, r=20, t=50, b=20), template="plotly_dark")
+    return fig
+
 
 @dash_app.callback(
     Output("total-net-worth-banner", "children"),
@@ -159,6 +189,12 @@ def force_update_table(n_clicks, current_counter):
     try:
         from api.finnhub_api import update_stock_prices
         update_stock_prices(forceUpdate=True)
+        tickers_df = db_manager.get_value_stocks()
+        tickers = tickers_df["ticker"].tolist() if not tickers_df.empty else []
+        print(f"[Sector] Force refresh tickers: {tickers}")
+        if tickers:
+            sector_map = finnhub_api.get_sector_allocation_map(tickers, force_refresh=True)
+            print(f"[Sector] Force refresh complete. Count={len(sector_map)}")
         # Just increment the counter → this will trigger your existing load_stocks_table callback
         return (current_counter or 0) + 1, "Prices F*cking Updated!", True, "danger", "Force Update Table", False, False, dt.datetime.utcnow().isoformat()
     except Exception as exc:
@@ -311,6 +347,12 @@ layout = html.Div(
                                             dbc.Col(dcc.Graph(id="stocks-value-chart"), md=6),
                                             dbc.Col(dcc.Graph(id="stocks-allocation-chart"), md=6),
                                         ]
+                                    ),
+                                    dbc.Row(
+                                        [
+                                            dbc.Col(dcc.Graph(id="stocks-sector-chart"), md=12),
+                                        ],
+                                        className="mt-3",
                                     ),
                                 ]
                             ),
