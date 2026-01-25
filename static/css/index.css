@@ -26,6 +26,13 @@
                 0 0 18px rgba(245,158,11,0.25),
                 0 10px 30px rgba(0,0,0,0.45);
             }
+            .neon-panel.neon-gunmetal {
+            background: linear-gradient(135deg, rgba(87,94,102,0.18), rgba(12,16,22,1));
+            border-color: rgba(185,28,28,0.45);
+            box-shadow:
+                0 0 20px rgba(185,28,28,0.35),
+                0 10px 30px rgba(0,0,0,0.55);
+            }
             .neon-body {
             padding: 1.25rem;
             backdrop-filter: blur(6px);
