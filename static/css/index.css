@@ -26,6 +26,13 @@
                 0 0 18px rgba(245,158,11,0.25),
                 0 10px 30px rgba(0,0,0,0.45);
             }
+            .neon-panel.neon-blue {
+            background: linear-gradient(135deg, rgba(59,130,246,0.18), rgba(15,23,42,1));
+            border-color: rgba(59,130,246,0.35);
+            box-shadow:
+                0 0 18px rgba(59,130,246,0.25),
+                0 10px 30px rgba(0,0,0,0.45);
+            }
             .neon-panel.neon-gunmetal {
             background: linear-gradient(135deg, rgba(87,94,102,0.18), rgba(12,16,22,1));
             border-color: rgba(185,28,28,0.45);
@@ -74,6 +81,28 @@
             object-fit: cover;
             border-radius: 12px;
             box-shadow: 0 0 16px rgba(16, 185, 129, 0.25);
+            }
+            .quant-monkey-glow {
+            box-shadow:
+                0 0 12px rgba(34, 197, 94, 0.5),
+                0 0 30px rgba(34, 197, 94, 0.45),
+                0 0 60px rgba(34, 197, 94, 0.35);
+            animation: quantPulse 2.8s ease-in-out infinite;
+            }
+
+            @keyframes quantPulse {
+            0%, 100% {
+                box-shadow:
+                0 0 12px rgba(34, 197, 94, 0.45),
+                0 0 30px rgba(34, 197, 94, 0.35),
+                0 0 60px rgba(34, 197, 94, 0.25);
+            }
+            50% {
+                box-shadow:
+                0 0 16px rgba(34, 197, 94, 0.75),
+                0 0 40px rgba(34, 197, 94, 0.6),
+                0 0 80px rgba(34, 197, 94, 0.45);
+            }
             }
             .bull-bear-actions {
             justify-content: space-between;

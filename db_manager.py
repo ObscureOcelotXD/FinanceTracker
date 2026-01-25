@@ -187,6 +187,22 @@ def init_db():
         ON plaid_holdings (account_id, ticker)
     """)
 
+    cur10 = con.cursor()
+    cur10.execute("""
+        CREATE TABLE IF NOT EXISTS benchmark_prices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            date TEXT NOT NULL,
+            closing_price REAL NOT NULL,
+            source TEXT,
+            updated_at TEXT
+        )
+    """)
+    cur10.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_prices_symbol_date
+        ON benchmark_prices (symbol, date)
+    """)
+
     con.commit()
     con.close()
 
@@ -624,6 +640,97 @@ def get_stock_prices_df():
     df = pd.read_sql_query(query, conn)
     conn.close()
     return df
+
+
+def get_portfolio_value_history():
+    conn = get_connection()
+    query = """
+        SELECT
+            sp.date,
+            sp.ticker,
+            sp.closing_price,
+            s.total_shares AS shares
+        FROM stock_prices sp
+        JOIN (
+            SELECT ticker, SUM(shares) AS total_shares
+            FROM Stocks
+            GROUP BY ticker
+        ) s
+            ON sp.ticker = s.ticker
+    """
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    if df.empty:
+        return df
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+    df["closing_price"] = pd.to_numeric(df["closing_price"], errors="coerce")
+    df["shares"] = pd.to_numeric(df["shares"], errors="coerce")
+    df["position_value"] = df["shares"] * df["closing_price"]
+    portfolio = (
+        df.groupby("date", as_index=False)["position_value"]
+        .sum()
+        .rename(columns={"position_value": "portfolio_value"})
+        .sort_values("date")
+    )
+    return portfolio
+
+
+def get_stock_price_series(ticker):
+    conn = get_connection()
+    query = "SELECT date, closing_price FROM stock_prices WHERE ticker = ?"
+    df = pd.read_sql_query(query, conn, params=(ticker,))
+    conn.close()
+    if df.empty:
+        return df
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+    df["closing_price"] = pd.to_numeric(df["closing_price"], errors="coerce")
+    return df.sort_values("date")
+
+
+def get_benchmark_price_series(symbol):
+    conn = get_connection()
+    query = "SELECT date, closing_price FROM benchmark_prices WHERE symbol = ?"
+    df = pd.read_sql_query(query, conn, params=(symbol,))
+    conn.close()
+    if df.empty:
+        return df
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+    df["closing_price"] = pd.to_numeric(df["closing_price"], errors="coerce")
+    return df.sort_values("date")
+
+
+def upsert_benchmark_price(symbol, date, closing_price, source=None, updated_at=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    if updated_at is None:
+        updated_at = datetime.utcnow().isoformat()
+    cur.execute(
+        "SELECT id FROM benchmark_prices WHERE symbol = ? AND date = ?",
+        (symbol, date),
+    )
+    row = cur.fetchone()
+    if row:
+        cur.execute(
+            """
+            UPDATE benchmark_prices
+            SET closing_price = ?, source = ?, updated_at = ?
+            WHERE symbol = ? AND date = ?
+            """,
+            (closing_price, source, updated_at, symbol, date),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO benchmark_prices (symbol, date, closing_price, source, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (symbol, date, closing_price, source, updated_at),
+        )
+    conn.commit()
+    conn.close()
 
 def delete_orphan_stock_prices():
     """

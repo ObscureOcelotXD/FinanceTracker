@@ -148,6 +148,59 @@
           </div>
           <div class="row g-4 mt-2">
             <div class="col-12">
+              <div class="neon-panel neon-blue">
+                <div class="neon-body">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div>
+                      <h2 class="h5 mb-1">Quant</h2>
+                      <p class="text-secondary mb-0">Research tools and signals (coming soon).</p>
+                    </div>
+                    <div class="fs-3 text-primary">
+                      <i class="bi bi-cpu"></i>
+                    </div>
+                  </div>
+                  <div class="row g-3 mt-2 align-items-start">
+                    <div class="col-12 col-lg-4">
+                      <img src="{{ url_for('static', filename='images/smart-monkey.jpg') }}" alt="Smart monkey" class="bull-bear-gif quant-monkey-glow">
+                    </div>
+                    <div class="col-12 col-lg-8">
+                      <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                          <div class="metric-tile">
+                            <div class="metric-label">Volatility (ann.)</div>
+                            <div class="metric-value" id="quantVolatility">Loading...</div>
+                          </div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                          <div class="metric-tile">
+                            <div class="metric-label">Max Drawdown</div>
+                            <div class="metric-value" id="quantMaxDrawdown">Loading...</div>
+                          </div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                          <div class="metric-tile">
+                            <div class="metric-label">Beta vs SPY</div>
+                            <div class="metric-value" id="quantBeta">Loading...</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="mt-2 text-lg-end">
+                        <span class="badge" id="quantLastUpdated">Loading...</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mt-5">
+                    <button class="btn btn-outline-primary btn-sm" disabled>
+                      <i class="bi bi-rocket-takeoff me-1"></i>Launch Quant
+                    </button>
+                    <small class="text-secondary ms-2">Awaiting setup.</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="row g-4 mt-2">
+            <div class="col-12">
               <div class="neon-panel neon-gunmetal">
                 <div class="neon-body">
                   <div class="d-flex align-items-center justify-content-between mb-2">
@@ -189,6 +242,53 @@
           alert('Wipe failed. Check console.');
         });
     });
+  }
+</script>
+
+<script>
+  const quantVolEl = document.getElementById('quantVolatility');
+  const quantDdEl = document.getElementById('quantMaxDrawdown');
+  const quantBetaEl = document.getElementById('quantBeta');
+  const quantUpdatedEl = document.getElementById('quantLastUpdated');
+  if (quantVolEl && quantDdEl && quantBetaEl && quantUpdatedEl) {
+    fetch('/quant/risk_summary')
+      .then(response => response.json())
+      .then(data => {
+        if (data.error) {
+          quantVolEl.innerText = "—";
+          quantDdEl.innerText = "—";
+          quantBetaEl.innerText = "—";
+          quantUpdatedEl.innerText = "Last updated: —";
+          quantUpdatedEl.className = "badge bg-secondary-subtle text-secondary-emphasis";
+          console.error("Quant risk summary error:", data.error);
+          return;
+        }
+        quantVolEl.innerText = data.volatility_pct !== null ? `${data.volatility_pct}%` : "—";
+        quantDdEl.innerText = data.max_drawdown_pct !== null ? `${data.max_drawdown_pct}%` : "—";
+        quantBetaEl.innerText = data.beta !== null ? data.beta : "—";
+        if (data.last_updated) {
+          const isFresh = data.fresh === true;
+          quantUpdatedEl.innerText = `Last updated: ${data.last_updated}`;
+          if (isFresh) {
+            quantUpdatedEl.className = "badge bg-info-subtle text-info-emphasis";
+            quantUpdatedEl.innerText = `Last updated: ${data.last_updated} ✓`;
+          } else {
+            quantUpdatedEl.className = "badge bg-warning text-dark";
+            quantUpdatedEl.innerText = `Last updated: ${data.last_updated} ✕`;
+          }
+        } else {
+          quantUpdatedEl.innerText = "Last updated: —";
+          quantUpdatedEl.className = "badge bg-secondary-subtle text-secondary-emphasis";
+        }
+      })
+      .catch(error => {
+        quantVolEl.innerText = "—";
+        quantDdEl.innerText = "—";
+        quantBetaEl.innerText = "—";
+        quantUpdatedEl.innerText = "Last updated: —";
+        quantUpdatedEl.className = "badge bg-secondary-subtle text-secondary-emphasis";
+        console.error("Quant risk fetch error:", error);
+      });
   }
 </script>
 
