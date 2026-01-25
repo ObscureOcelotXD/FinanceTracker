@@ -49,7 +49,7 @@ def create_flask_app():
     @app.route('/admin/wipe_all', methods=['POST'])
     def admin_wipe_all():
         try:
-            db_manager.wipe_all_data()
+            db_manager.wipe_all_data(force=True)
             return jsonify({"status": "ok"})
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500

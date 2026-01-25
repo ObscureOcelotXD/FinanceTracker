@@ -146,6 +146,15 @@ def init_db():
         )
     """)
 
+    cur7.execute("""
+        CREATE TABLE IF NOT EXISTS items (
+            item_id TEXT PRIMARY KEY,
+            access_token TEXT,
+            institution_name TEXT,
+            institution_id TEXT
+        )
+    """)
+
     cur8 = con.cursor()
     cur8.execute("""
         CREATE TABLE IF NOT EXISTS realized_gains (
@@ -413,9 +422,19 @@ def get_plaid_holdings(institution_name=None):
     return df
 
 
-def wipe_all_data():
+def wipe_all_data(force: bool = False):
+    db_path = str(DATABASE)
+    if not force and "test" not in db_path.lower():
+        raise RuntimeError("Refusing to wipe non-test database without force=True.")
     conn = get_connection()
     cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    existing_tables = {row[0] for row in cur.fetchall()}
+
+    def _safe_delete(table_name):
+        if table_name in existing_tables:
+            cur.execute(f"DELETE FROM {table_name}")
+
     cur.execute("DELETE FROM finance_data")
     cur.execute("DELETE FROM Stocks")
     cur.execute("DELETE FROM stock_prices")
@@ -423,9 +442,9 @@ def wipe_all_data():
     cur.execute("DELETE FROM realized_gains")
     cur.execute("DELETE FROM accounts")
     cur.execute("DELETE FROM transactions")
-    cur.execute("DELETE FROM items")
-    cur.execute("DELETE FROM plaid_holdings")
-    cur.execute("DELETE FROM price_update_log")
+    _safe_delete("items")
+    _safe_delete("plaid_holdings")
+    _safe_delete("price_update_log")
     conn.commit()
     conn.close()
 

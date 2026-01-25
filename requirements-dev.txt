@@ -2,3 +2,4 @@ flake8==7.1.2
 ggshield==1.36.0
 git-filter-repo==2.47.0
 pyngrok==7.2.3
+pytest==8.2.1
