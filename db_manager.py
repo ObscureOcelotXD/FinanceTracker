@@ -34,6 +34,10 @@ def init_db():
             current_balance REAL
         )
     """)
+    cur2.execute("PRAGMA table_info(accounts)")
+    account_columns = [row[1] for row in cur2.fetchall()]
+    if "item_id" not in account_columns:
+        cur2.execute("ALTER TABLE accounts ADD COLUMN item_id TEXT")
 
     cur3 = con.cursor()
     cur3.execute("""
@@ -159,6 +163,21 @@ def init_db():
         )
     """)
 
+    cur9 = con.cursor()
+    cur9.execute("""
+        CREATE TABLE IF NOT EXISTS plaid_holdings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            shares REAL NOT NULL,
+            cost_basis REAL
+        )
+    """)
+    cur9.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_plaid_holdings_account_ticker
+        ON plaid_holdings (account_id, ticker)
+    """)
+
     con.commit()
     con.close()
 
@@ -238,30 +257,175 @@ def insert_items(item_id, access_token):
     c.execute("""
         CREATE TABLE IF NOT EXISTS items (
             item_id TEXT PRIMARY KEY,
-            access_token TEXT
+            access_token TEXT,
+            institution_name TEXT,
+            institution_id TEXT
         )
     """)
-    c.execute("INSERT OR REPLACE INTO items (item_id, access_token) VALUES (?, ?)",
-                (item_id, access_token))
+    c.execute("PRAGMA table_info(items)")
+    item_columns = [row[1] for row in c.fetchall()]
+    if "institution_name" not in item_columns:
+        c.execute("ALTER TABLE items ADD COLUMN institution_name TEXT")
+    if "institution_id" not in item_columns:
+        c.execute("ALTER TABLE items ADD COLUMN institution_id TEXT")
+    c.execute(
+        "INSERT OR REPLACE INTO items (item_id, access_token) VALUES (?, ?)",
+        (item_id, access_token),
+    )
     conn.commit()
     conn.close()
 
-def store_accounts(accounts):
+
+def update_item_institution(item_id, institution_name=None, institution_id=None):
     conn = sqlite3.connect("finance_data.db")
     c = conn.cursor()
+    c.execute("PRAGMA table_info(items)")
+    item_columns = [row[1] for row in c.fetchall()]
+    if "institution_name" not in item_columns:
+        c.execute("ALTER TABLE items ADD COLUMN institution_name TEXT")
+    if "institution_id" not in item_columns:
+        c.execute("ALTER TABLE items ADD COLUMN institution_id TEXT")
+    c.execute(
+        """
+        UPDATE items
+        SET institution_name = ?, institution_id = ?
+        WHERE item_id = ?
+        """,
+        (institution_name, institution_id, item_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_items():
+    conn = sqlite3.connect("finance_data.db")
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS items (
+            item_id TEXT PRIMARY KEY,
+            access_token TEXT
+        )
+    """)
+    c.execute("SELECT item_id, access_token FROM items")
+    rows = c.fetchall()
+    conn.close()
+    return [{"item_id": row[0], "access_token": row[1]} for row in rows]
+
+def store_accounts(accounts, item_id=None):
+    conn = sqlite3.connect("finance_data.db")
+    c = conn.cursor()
+    c.execute("PRAGMA table_info(accounts)")
+    account_columns = [row[1] for row in c.fetchall()]
+    if "item_id" not in account_columns:
+        c.execute("ALTER TABLE accounts ADD COLUMN item_id TEXT")
     for account in accounts:
         c.execute("""
             INSERT OR REPLACE INTO accounts 
-            (account_id, name, official_name, type, subtype, current_balance)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (account_id, name, official_name, type, subtype, current_balance, item_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             account.account_id,
             account.name,
             account.official_name,
             str(account.type),
             str(account.subtype),
-            account.balances.current
+            account.balances.current,
+            item_id,
         ))
+    conn.commit()
+    conn.close()
+
+
+def get_institutions():
+    conn = sqlite3.connect("finance_data.db")
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS items (
+            item_id TEXT PRIMARY KEY,
+            access_token TEXT,
+            institution_name TEXT,
+            institution_id TEXT
+        )
+    """)
+    c.execute("SELECT DISTINCT institution_name FROM items WHERE institution_name IS NOT NULL")
+    rows = c.fetchall()
+    conn.close()
+    return [row[0] for row in rows]
+
+
+def upsert_plaid_holding(account_id, ticker, shares, cost_basis=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO plaid_holdings (account_id, ticker, shares, cost_basis)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(account_id, ticker) DO UPDATE SET
+            shares = excluded.shares,
+            cost_basis = excluded.cost_basis
+        """,
+        (account_id, ticker, shares, cost_basis),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_plaid_holdings(institution_name=None):
+    conn = get_connection()
+    params = []
+    where_clause = ""
+    if institution_name:
+        where_clause = "WHERE i.institution_name = ?"
+        params.append(institution_name)
+    query = f"""
+        SELECT
+            h.account_id,
+            COALESCE(a.official_name, a.name) AS account_name,
+            i.institution_name,
+            h.ticker,
+            h.shares,
+            COALESCE(h.cost_basis, 0) AS cost_basis,
+            sp.closing_price AS latest_price,
+            (h.shares * sp.closing_price) AS position_value,
+            ((h.shares * sp.closing_price) - COALESCE(h.cost_basis, 0)) AS gain_loss,
+            CASE
+                WHEN COALESCE(h.cost_basis, 0) = 0 THEN NULL
+                ELSE ((h.shares * sp.closing_price) - COALESCE(h.cost_basis, 0)) / COALESCE(h.cost_basis, 0)
+            END AS gain_loss_pct
+        FROM plaid_holdings h
+        LEFT JOIN accounts a
+            ON a.account_id = h.account_id
+        LEFT JOIN items i
+            ON i.item_id = a.item_id
+        LEFT JOIN (
+            SELECT ticker, MAX(date) AS max_date
+            FROM stock_prices
+            GROUP BY ticker
+        ) latest
+            ON latest.ticker = h.ticker
+        LEFT JOIN stock_prices sp
+            ON sp.ticker = h.ticker
+           AND sp.date = latest.max_date
+        {where_clause}
+    """
+    df = pd.read_sql_query(query, conn, params=params)
+    conn.close()
+    return df
+
+
+def wipe_all_data():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM finance_data")
+    cur.execute("DELETE FROM Stocks")
+    cur.execute("DELETE FROM stock_prices")
+    cur.execute("DELETE FROM stock_metadata")
+    cur.execute("DELETE FROM realized_gains")
+    cur.execute("DELETE FROM accounts")
+    cur.execute("DELETE FROM transactions")
+    cur.execute("DELETE FROM items")
+    cur.execute("DELETE FROM plaid_holdings")
+    cur.execute("DELETE FROM price_update_log")
     conn.commit()
     conn.close()
 
@@ -492,6 +656,29 @@ def update_stock(stock_id, ticker=None, shares=None, cost_basis=None):
     cur = conn.cursor()
     params.append(stock_id)
     cur.execute(f"UPDATE Stocks SET {', '.join(fields)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+
+def upsert_stock_by_ticker(ticker, shares, cost_basis=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, cost_basis FROM Stocks WHERE ticker = ?", (ticker,))
+    row = cur.fetchone()
+    if row:
+        stock_id = row[0]
+        existing_cost_basis = row[1]
+        if cost_basis is None:
+            cost_basis = existing_cost_basis
+        cur.execute(
+            "UPDATE Stocks SET shares = ?, cost_basis = ? WHERE id = ?",
+            (shares, cost_basis, stock_id),
+        )
+    else:
+        cur.execute(
+            "INSERT INTO Stocks (ticker, shares, cost_basis) VALUES (?, ?, ?)",
+            (ticker, shares, cost_basis),
+        )
     conn.commit()
     conn.close()
 

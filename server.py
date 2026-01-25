@@ -4,6 +4,7 @@ import logging
 import api.alpha_api as av
 # import finnhub_api as finn
 from dotenv import load_dotenv
+import db_manager
 
 # Load environment variables
 load_dotenv()
@@ -44,6 +45,14 @@ def create_flask_app():
         data = request.get_json()
         print("Received webhook:", data)
         return jsonify({"status": "received"}), 200
+
+    @app.route('/admin/wipe_all', methods=['POST'])
+    def admin_wipe_all():
+        try:
+            db_manager.wipe_all_data()
+            return jsonify({"status": "ok"})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
     
 
     app.register_blueprint(av.alpha_api)
@@ -66,6 +75,9 @@ def create_flask_app():
     from api.umbrel_lightning_api import umbrel_lightning_api
     app.register_blueprint(umbrel_lightning_api)
     
+    from api.btc_wallet_api import btc_wallet_api
+    app.register_blueprint(btc_wallet_api)
+
     # from api.binance_api import binance_api
     # app.register_blueprint(binance_api)
     return app

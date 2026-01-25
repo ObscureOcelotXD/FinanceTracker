@@ -326,6 +326,117 @@ dash.register_page(
                 width={"size": 8, "offset": 2}
             )
         )
+        ,
+        dbc.Row(
+            dbc.Col(
+                dbc.Card(
+                    [
+                        dbc.CardBody(
+                            [
+                                html.Div(
+                                    [
+                                        html.Div(
+                                            [
+                                                html.Div("Plaid Holdings", className="neon-title"),
+                                                html.Div("Imported positions by institution", className="neon-subtitle"),
+                                            ]
+                                        ),
+                                    ],
+                                    className="neon-card-header",
+                                ),
+                                dbc.Row(
+                                    [
+                                        dbc.Col(
+                                            dcc.Dropdown(
+                                                id="institution-filter",
+                                                options=[],
+                                                value="All",
+                                                placeholder="Filter by institution...",
+                                                className="chart-dropdown",
+                                            ),
+                                            width=6,
+                                        )
+                                    ],
+                                    className="mb-3",
+                                ),
+                                dash_table.DataTable(
+                                    id="plaid-holdings-table",
+                                    row_deletable=False,
+                                    row_selectable=False,
+                                    columns=[
+                                        {"name": "Institution", "id": "institution_name"},
+                                        {"name": "Account", "id": "account_name"},
+                                        {"name": "Ticker", "id": "ticker"},
+                                        {"name": "Shares", "id": "shares", "type": "numeric"},
+                                        {
+                                            "name": "Cost Basis",
+                                            "id": "cost_basis",
+                                            "type": "numeric",
+                                            "format": FormatTemplate.money(2),
+                                        },
+                                        {
+                                            "name": "Position Value",
+                                            "id": "position_value",
+                                            "type": "numeric",
+                                            "format": FormatTemplate.money(2),
+                                        },
+                                        {
+                                            "name": "Gain/Loss",
+                                            "id": "gain_loss",
+                                            "type": "numeric",
+                                            "format": FormatTemplate.money(2),
+                                        },
+                                        {
+                                            "name": "% Gain",
+                                            "id": "gain_loss_pct",
+                                            "type": "numeric",
+                                            "format": FormatTemplate.percentage(2),
+                                        },
+                                    ],
+                                    data=[],
+                                    style_table={"overflowX": "auto"},
+                                    style_cell={"textAlign": "center"},
+                                    style_header={"backgroundColor": "#1f2c3b", "fontWeight": "bold"},
+                                    style_data={"backgroundColor": "#11181f"},
+                                    style_data_conditional=[
+                                        {
+                                            "if": {"filter_query": "{ticker} = 'TOTAL'"},
+                                            "backgroundColor": "#1a242f",
+                                            "fontWeight": "bold",
+                                        },
+                                        {
+                                            "if": {"filter_query": "{ticker} = 'TOTAL'"},
+                                            "pointerEvents": "none",
+                                        },
+                                        {
+                                            "if": {"filter_query": "{gain_loss} > 0", "column_id": "gain_loss"},
+                                            "color": "#22c55e",
+                                        },
+                                        {
+                                            "if": {"filter_query": "{gain_loss} < 0", "column_id": "gain_loss"},
+                                            "color": "#ef4444",
+                                        },
+                                        {
+                                            "if": {"filter_query": "{gain_loss_pct} > 0", "column_id": "gain_loss_pct"},
+                                            "color": "#22c55e",
+                                        },
+                                        {
+                                            "if": {"filter_query": "{gain_loss_pct} < 0", "column_id": "gain_loss_pct"},
+                                            "color": "#ef4444",
+                                        },
+                                    ],
+                                    filter_action="native",
+                                    sort_action="native",
+                                    page_size=10,
+                                ),
+                            ]
+                        ),
+                    ],
+                    className="mb-4 neon-panel neon-yellow",
+                ),
+                width={"size": 10, "offset": 1},
+            )
+        )
     ], fluid=True)
 )
 
@@ -504,4 +615,35 @@ def load_stocks_on_init(ts, store_data):
     if totals["cost_basis"]:
         totals["gain_loss_pct"] = totals["gain_loss"] / totals["cost_basis"]
     return df.to_dict("records") + [totals]
+
+
+@dash.callback(
+    Output("plaid-holdings-table", "data"),
+    Output("institution-filter", "options"),
+    [
+        Input("stocks-store", "modified_timestamp"),
+        Input("institution-filter", "value"),
+    ],
+)
+def load_plaid_holdings(ts, institution_value):
+    institutions = db_manager.get_institutions()
+    options = [{"label": "All", "value": "All"}] + [
+        {"label": name, "value": name} for name in institutions
+    ]
+    selected = None if institution_value in (None, "All") else institution_value
+    df = db_manager.get_plaid_holdings(selected)
+    if df.empty:
+        return [], options
+    totals = {
+        "institution_name": "All",
+        "account_name": "TOTAL",
+        "ticker": "TOTAL",
+        "shares": df["shares"].sum(),
+        "cost_basis": df["cost_basis"].sum(),
+        "position_value": df["position_value"].sum(),
+        "gain_loss": df["gain_loss"].sum(),
+    }
+    if totals["cost_basis"]:
+        totals["gain_loss_pct"] = totals["gain_loss"] / totals["cost_basis"]
+    return df.to_dict("records") + [totals], options
 
