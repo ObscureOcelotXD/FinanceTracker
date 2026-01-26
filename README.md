@@ -25,3 +25,20 @@ Included tests:
   Confirms Polygon industry data is preferred over Finnhub.
 - `tests/test_finnhub_sector_cache.py::test_force_refresh_ignores_cached`  
   Confirms force refresh ignores cached sector values.
+
+## ETF Sector Sources
+
+To decompose ETF/index funds into sector weights, use the Admin "ETF Source
+Registry" on the home page. The app auto-detects provider URLs (Schwab first,
+then Yahoo) and lets you override the URL/type manually. Sector weights cache
+weekly and fall back to Polygon if no provider data is available.
+
+## Umbrel Lightning TLS
+
+If you see `InsecureRequestWarning` from the Lightning endpoint, it means HTTPS
+cert verification is disabled (common with self-signed certs on local nodes).
+You can keep it disabled for local-only use, or supply a CA bundle and enable
+verification later:
+
+- `UMBREL_LIGHTNING_CA_BUNDLE` = path to your CA cert file
+- `UMBREL_LIGHTNING_VERIFY_SSL` = `true`

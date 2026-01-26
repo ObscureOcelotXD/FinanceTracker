@@ -203,6 +203,32 @@ def init_db():
         ON benchmark_prices (symbol, date)
     """)
 
+    cur11 = con.cursor()
+    cur11.execute("""
+        CREATE TABLE IF NOT EXISTS etf_sector_breakdown (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            sector TEXT NOT NULL,
+            weight REAL NOT NULL,
+            source TEXT,
+            updated_at TEXT
+        )
+    """)
+    cur11.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_etf_sector_symbol_sector
+        ON etf_sector_breakdown (symbol, sector)
+    """)
+
+    cur12 = con.cursor()
+    cur12.execute("""
+        CREATE TABLE IF NOT EXISTS etf_sources (
+            symbol TEXT PRIMARY KEY,
+            source_type TEXT NOT NULL,
+            url TEXT,
+            updated_at TEXT
+        )
+    """)
+
     con.commit()
     con.close()
 
@@ -461,6 +487,9 @@ def wipe_all_data(force: bool = False):
     _safe_delete("items")
     _safe_delete("plaid_holdings")
     _safe_delete("price_update_log")
+    _safe_delete("benchmark_prices")
+    _safe_delete("etf_sector_breakdown")
+    _safe_delete("etf_sources")
     conn.commit()
     conn.close()
 
@@ -728,6 +757,110 @@ def upsert_benchmark_price(symbol, date, closing_price, source=None, updated_at=
             VALUES (?, ?, ?, ?, ?)
             """,
             (symbol, date, closing_price, source, updated_at),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_etf_sector_breakdown(symbol):
+    conn = get_connection()
+    query = """
+        SELECT sector, weight, source, updated_at
+        FROM etf_sector_breakdown
+        WHERE symbol = ?
+    """
+    df = pd.read_sql_query(query, conn, params=(symbol,))
+    conn.close()
+    if df.empty:
+        return df
+    df = df.copy()
+    df["weight"] = pd.to_numeric(df["weight"], errors="coerce")
+    return df
+
+
+def clear_etf_sector_breakdown(symbol):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM etf_sector_breakdown WHERE symbol = ?", (symbol,))
+    conn.commit()
+    conn.close()
+
+
+def upsert_etf_sector_breakdown(symbol, sector, weight, source=None, updated_at=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    if updated_at is None:
+        updated_at = datetime.utcnow().isoformat()
+    cur.execute(
+        "SELECT id FROM etf_sector_breakdown WHERE symbol = ? AND sector = ?",
+        (symbol, sector),
+    )
+    row = cur.fetchone()
+    if row:
+        cur.execute(
+            """
+            UPDATE etf_sector_breakdown
+            SET weight = ?, source = ?, updated_at = ?
+            WHERE symbol = ? AND sector = ?
+            """,
+            (weight, source, updated_at, symbol, sector),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO etf_sector_breakdown (symbol, sector, weight, source, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (symbol, sector, weight, source, updated_at),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_etf_sources():
+    conn = get_connection()
+    query = "SELECT symbol, source_type, url, updated_at FROM etf_sources"
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    return df
+
+
+def get_etf_source(symbol):
+    conn = get_connection()
+    query = "SELECT symbol, source_type, url, updated_at FROM etf_sources WHERE symbol = ?"
+    df = pd.read_sql_query(query, conn, params=(symbol,))
+    conn.close()
+    if df.empty:
+        return None
+    return df.iloc[0].to_dict()
+
+
+def upsert_etf_source(symbol, source_type, url=None, updated_at=None):
+    if updated_at is None:
+        updated_at = datetime.utcnow().isoformat()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT symbol FROM etf_sources WHERE symbol = ?",
+        (symbol,),
+    )
+    row = cur.fetchone()
+    if row:
+        cur.execute(
+            """
+            UPDATE etf_sources
+            SET source_type = ?, url = ?, updated_at = ?
+            WHERE symbol = ?
+            """,
+            (source_type, url, updated_at, symbol),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO etf_sources (symbol, source_type, url, updated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (symbol, source_type, url, updated_at),
         )
     conn.commit()
     conn.close()

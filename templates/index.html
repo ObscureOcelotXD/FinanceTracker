@@ -184,6 +184,26 @@
                           </div>
                         </div>
                       </div>
+                      <div class="row g-3 mt-2">
+                        <div class="col-12 col-md-4">
+                          <div class="metric-tile">
+                            <div class="metric-label">Top Sector</div>
+                            <div class="metric-value" id="quantTopSector">Loading...</div>
+                          </div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                          <div class="metric-tile">
+                            <div class="metric-label">HHI</div>
+                            <div class="metric-value" id="quantHHI">Loading...</div>
+                          </div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                          <div class="metric-tile">
+                            <div class="metric-label">Diversification Ratio</div>
+                            <div class="metric-value" id="quantDiversification">Loading...</div>
+                          </div>
+                        </div>
+                      </div>
                       <div class="mt-2 text-lg-end">
                         <span class="badge" id="quantLastUpdated">Loading...</span>
                       </div>
@@ -213,6 +233,51 @@
                     <i class="bi bi-trash me-1"></i>Wipe All Data
                   </button>
                   <small class="text-secondary ms-2">This clears local DB data only.</small>
+                  <hr class="border-secondary my-4">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div>
+                      <h3 class="h6 mb-1">ETF Source Registry</h3>
+                      <p class="text-secondary mb-0">Auto-lookup with manual override.</p>
+                    </div>
+                  </div>
+                  <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-3">
+                      <label class="form-label text-secondary small mb-1" for="etfSourceSymbol">Symbol</label>
+                      <input id="etfSourceSymbol" class="form-control form-control-sm" placeholder="VTI" />
+                    </div>
+                    <div class="col-12 col-md-5">
+                      <label class="form-label text-secondary small mb-1" for="etfSourceUrl">Provider URL (optional)</label>
+                      <input id="etfSourceUrl" class="form-control form-control-sm" placeholder="https://..." />
+                    </div>
+                    <div class="col-12 col-md-2">
+                      <label class="form-label text-secondary small mb-1" for="etfSourceType">Source Type</label>
+                      <select id="etfSourceType" class="form-select form-select-sm">
+                        <option value="">Auto</option>
+                        <option value="schwab_portfolio">Schwab</option>
+                        <option value="provider_csv">Provider CSV</option>
+                        <option value="yahoo_top_holdings">Yahoo</option>
+                      </select>
+                    </div>
+                    <div class="col-12 col-md-2">
+                      <button id="etfSourceSave" class="btn btn-outline-light btn-sm w-100">
+                        <i class="bi bi-save2 me-1"></i>Save
+                      </button>
+                    </div>
+                  </div>
+                  <div id="etfSourceStatus" class="text-secondary small mt-2">Ready.</div>
+                  <div class="table-responsive mt-3">
+                    <table class="table table-dark table-striped table-sm align-middle" id="etfSourceTable">
+                      <thead>
+                        <tr>
+                          <th>Symbol</th>
+                          <th>Source Type</th>
+                          <th>URL</th>
+                          <th>Updated</th>
+                        </tr>
+                      </thead>
+                      <tbody></tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -246,11 +311,96 @@
 </script>
 
 <script>
+  const etfSaveBtn = document.getElementById('etfSourceSave');
+  const etfSymbolEl = document.getElementById('etfSourceSymbol');
+  const etfUrlEl = document.getElementById('etfSourceUrl');
+  const etfTypeEl = document.getElementById('etfSourceType');
+  const etfStatusEl = document.getElementById('etfSourceStatus');
+  const etfTableBody = document.querySelector('#etfSourceTable tbody');
+
+  function renderEtfSources(items) {
+    if (!etfTableBody) return;
+    etfTableBody.innerHTML = '';
+    if (!items || !items.length) {
+      const row = document.createElement('tr');
+      row.innerHTML = '<td colspan="4" class="text-secondary">No ETF sources yet.</td>';
+      etfTableBody.appendChild(row);
+      return;
+    }
+    items.forEach(item => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${item.symbol || ''}</td>
+        <td>${item.source_type || ''}</td>
+        <td>${item.url || ''}</td>
+        <td>${item.updated_at || ''}</td>
+      `;
+      etfTableBody.appendChild(row);
+    });
+  }
+
+  function loadEtfSources() {
+    fetch('/admin/etf_sources')
+      .then(response => response.json())
+      .then(data => {
+        if (data.error) {
+          if (etfStatusEl) etfStatusEl.innerText = `Load failed: ${data.error}`;
+          return;
+        }
+        renderEtfSources(data.items || []);
+      })
+      .catch(err => {
+        if (etfStatusEl) etfStatusEl.innerText = `Load failed: ${err}`;
+      });
+  }
+
+  if (etfSaveBtn) {
+    etfSaveBtn.addEventListener('click', () => {
+      const symbol = etfSymbolEl ? etfSymbolEl.value.trim().toUpperCase() : '';
+      const url = etfUrlEl ? etfUrlEl.value.trim() : '';
+      const sourceType = etfTypeEl ? etfTypeEl.value : '';
+      if (!symbol) {
+        if (etfStatusEl) etfStatusEl.innerText = 'Symbol is required.';
+        return;
+      }
+      if (etfStatusEl) etfStatusEl.innerText = 'Saving...';
+      fetch('/admin/etf_sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol, url, source_type: sourceType }),
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.error) {
+            if (etfStatusEl) etfStatusEl.innerText = `Save failed: ${data.error}`;
+            return;
+          }
+          if (etfStatusEl) etfStatusEl.innerText = `Saved: ${data.source.source_type}`;
+          if (etfUrlEl && data.source.url) {
+            etfUrlEl.value = data.source.url;
+          }
+          loadEtfSources();
+        })
+        .catch(err => {
+          if (etfStatusEl) etfStatusEl.innerText = `Save failed: ${err}`;
+        });
+    });
+  }
+
+  if (etfTableBody) {
+    loadEtfSources();
+  }
+</script>
+
+<script>
   const quantVolEl = document.getElementById('quantVolatility');
   const quantDdEl = document.getElementById('quantMaxDrawdown');
   const quantBetaEl = document.getElementById('quantBeta');
+  const quantTopSectorEl = document.getElementById('quantTopSector');
+  const quantHHIEl = document.getElementById('quantHHI');
+  const quantDiversificationEl = document.getElementById('quantDiversification');
   const quantUpdatedEl = document.getElementById('quantLastUpdated');
-  if (quantVolEl && quantDdEl && quantBetaEl && quantUpdatedEl) {
+  if (quantVolEl && quantDdEl && quantBetaEl && quantUpdatedEl && quantTopSectorEl && quantHHIEl && quantDiversificationEl) {
     fetch('/quant/risk_summary')
       .then(response => response.json())
       .then(data => {
@@ -258,6 +408,9 @@
           quantVolEl.innerText = "—";
           quantDdEl.innerText = "—";
           quantBetaEl.innerText = "—";
+          quantTopSectorEl.innerText = "—";
+          quantHHIEl.innerText = "—";
+          quantDiversificationEl.innerText = "—";
           quantUpdatedEl.innerText = "Last updated: —";
           quantUpdatedEl.className = "badge bg-secondary-subtle text-secondary-emphasis";
           console.error("Quant risk summary error:", data.error);
@@ -266,6 +419,13 @@
         quantVolEl.innerText = data.volatility_pct !== null ? `${data.volatility_pct}%` : "—";
         quantDdEl.innerText = data.max_drawdown_pct !== null ? `${data.max_drawdown_pct}%` : "—";
         quantBetaEl.innerText = data.beta !== null ? data.beta : "—";
+        if (data.top_sector && data.top_sector_pct !== null) {
+          quantTopSectorEl.innerText = `${data.top_sector} (${data.top_sector_pct}%)`;
+        } else {
+          quantTopSectorEl.innerText = "—";
+        }
+        quantHHIEl.innerText = data.hhi !== null ? data.hhi : "—";
+        quantDiversificationEl.innerText = data.diversification_ratio !== null ? data.diversification_ratio : "—";
         if (data.last_updated) {
           const isFresh = data.fresh === true;
           quantUpdatedEl.innerText = `Last updated: ${data.last_updated}`;
@@ -285,6 +445,9 @@
         quantVolEl.innerText = "—";
         quantDdEl.innerText = "—";
         quantBetaEl.innerText = "—";
+        quantTopSectorEl.innerText = "—";
+        quantHHIEl.innerText = "—";
+        quantDiversificationEl.innerText = "—";
         quantUpdatedEl.innerText = "Last updated: —";
         quantUpdatedEl.className = "badge bg-secondary-subtle text-secondary-emphasis";
         console.error("Quant risk fetch error:", error);

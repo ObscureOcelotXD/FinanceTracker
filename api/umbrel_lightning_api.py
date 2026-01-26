@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify
 import os
 import json
 import requests
+import urllib3
 from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
 
@@ -27,9 +28,19 @@ def get_lightning_info():
     
     url = f"https://{host}:{port}/v1/getinfo"  # Using HTTPS as you mentioned
     headers = {'Grpc-Metadata-macaroon': macaroon_hex}
+    verify_setting = os.getenv("UMBREL_LIGHTNING_VERIFY_SSL")
+    ca_bundle = os.getenv("UMBREL_LIGHTNING_CA_BUNDLE")
+    if ca_bundle:
+        verify = ca_bundle
+    elif verify_setting is None:
+        verify = False
+    else:
+        verify = verify_setting.strip().lower() in {"1", "true", "yes", "y", "on"}
+    if verify is False:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     
     try:
-        response = requests.get(url, headers=headers, verify=False, timeout=15)  # verify=False if using self-signed certs
+        response = requests.get(url, headers=headers, verify=verify, timeout=15)
         if not response.ok:
             return {"error": f"LND HTTP {response.status_code}", "detail": response.text[:500]}
         data = response.json()

@@ -58,6 +58,35 @@ def create_flask_app():
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
 
+    @app.route('/admin/etf_sources', methods=['GET'])
+    def admin_get_etf_sources():
+        try:
+            df = db_manager.get_etf_sources()
+            records = df.sort_values("symbol").to_dict(orient="records") if not df.empty else []
+            return jsonify({"items": records})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/admin/etf_sources', methods=['POST'])
+    def admin_upsert_etf_source():
+        data = request.get_json(force=True) or {}
+        symbol = (data.get("symbol") or "").strip().upper()
+        url = (data.get("url") or "").strip() or None
+        source_type = (data.get("source_type") or "").strip() or None
+        if not symbol:
+            return jsonify({"error": "Missing symbol"}), 400
+        try:
+            from api import etf_breakdown
+            result = etf_breakdown.resolve_source(
+                symbol,
+                url=url,
+                source_type=source_type,
+                allow_auto_lookup=True,
+            )
+            return jsonify({"status": "ok", "source": result})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
     def _fetch_yahoo_history(symbol, start_date, end_date):
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
         params = {
@@ -104,13 +133,25 @@ def create_flask_app():
         try:
             df = db_manager.get_portfolio_value_history()
             if df.empty or len(df) < 2:
-                return jsonify({"volatility_pct": None, "max_drawdown_pct": None, "beta": None, "last_updated": None, "fresh": False})
+                return jsonify({
+                    "volatility_pct": None,
+                    "max_drawdown_pct": None,
+                    "beta": None,
+                    "last_updated": None,
+                    "fresh": False,
+                    "top_sector": None,
+                    "top_sector_pct": None,
+                    "hhi": None,
+                    "diversification_ratio": None,
+                })
             df = df.sort_values("date").copy()
             df["returns"] = df["portfolio_value"].pct_change()
             returns = df["returns"].dropna()
             volatility = None
+            volatility_raw = None
             if not returns.empty:
-                volatility = returns.std() * math.sqrt(252) * 100
+                volatility_raw = returns.std() * math.sqrt(252)
+                volatility = volatility_raw * 100
             running_max = df["portfolio_value"].cummax()
             drawdown = df["portfolio_value"] / running_max - 1
             max_drawdown = drawdown.min() * 100 if not drawdown.empty else None
@@ -129,6 +170,58 @@ def create_flask_app():
             else:
                 last_business_day = today
             fresh = last_updated >= last_business_day
+            top_sector = None
+            top_sector_pct = None
+            hhi = None
+            diversification_ratio = None
+            value_df = db_manager.get_value_stocks()
+            if not value_df.empty:
+                value_df = value_df.copy()
+                total_value = value_df["position_value"].sum()
+                if total_value > 0:
+                    value_df["weight"] = value_df["position_value"] / total_value
+                    try:
+                        from api import finnhub_api
+                        from api import etf_breakdown
+                        tickers = value_df["ticker"].tolist()
+                        sector_map = finnhub_api.get_sector_allocation_map(tickers)
+                        sector_weights = {}
+                        for _, row in value_df.iterrows():
+                            ticker = row["ticker"]
+                            weight = float(row["weight"])
+                            if etf_breakdown.is_tracked_etf(ticker):
+                                breakdown = etf_breakdown.get_sector_breakdown(ticker, refresh_days=7)
+                                if breakdown:
+                                    for sector, portion in breakdown.items():
+                                        sector_weights[sector] = sector_weights.get(sector, 0.0) + weight * float(portion)
+                                    continue
+                            sector = sector_map.get(ticker) or "Unknown"
+                            sector_weights[sector] = sector_weights.get(sector, 0.0) + weight
+                        if sector_weights:
+                            total_sector_weight = sum(sector_weights.values())
+                            if total_sector_weight > 0:
+                                normalized = {k: v / total_sector_weight for k, v in sector_weights.items()}
+                                top_sector = max(normalized, key=normalized.get)
+                                top_sector_pct = float(normalized[top_sector] * 100)
+                                hhi = float(sum(value ** 2 for value in normalized.values()))
+                    except Exception:
+                        pass
+                    price_df = db_manager.get_stock_prices_df()
+                    if not price_df.empty:
+                        price_df = price_df.copy()
+                        price_df["date"] = pd.to_datetime(price_df["date"])
+                        price_df["closing_price"] = pd.to_numeric(price_df["closing_price"], errors="coerce")
+                        price_df = price_df.sort_values(["ticker", "date"])
+                        price_df["returns"] = price_df.groupby("ticker")["closing_price"].pct_change()
+                        vol_by_ticker = price_df.groupby("ticker")["returns"].std() * math.sqrt(252)
+                        vol_by_ticker = vol_by_ticker.dropna()
+                        if not vol_by_ticker.empty and "weight" in value_df.columns:
+                            weights = value_df.set_index("ticker")["weight"]
+                            aligned = vol_by_ticker.to_frame("vol").join(weights.to_frame("weight"), how="inner")
+                            if not aligned.empty:
+                                weighted_avg_vol = float((aligned["vol"] * aligned["weight"]).sum())
+                                if weighted_avg_vol > 0 and volatility_raw:
+                                    diversification_ratio = float(volatility_raw / weighted_avg_vol)
             spy = _ensure_benchmark_history("SPY", start_date, end_date)
             if not spy.empty:
                 spy = spy.sort_values("date").copy()
@@ -147,6 +240,10 @@ def create_flask_app():
                 "beta": round(beta, 2) if beta is not None else None,
                 "last_updated": last_updated.isoformat(),
                 "fresh": fresh,
+                "top_sector": top_sector,
+                "top_sector_pct": round(top_sector_pct, 2) if top_sector_pct is not None else None,
+                "hhi": round(hhi, 4) if hhi is not None else None,
+                "diversification_ratio": round(diversification_ratio, 2) if diversification_ratio is not None else None,
             })
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
