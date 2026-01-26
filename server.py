@@ -41,6 +41,12 @@ def create_flask_app():
         resp.headers["Cache-Control"] = "no-store"
         return resp
 
+    @app.route('/quant')
+    def quant():
+        resp = make_response(render_template('quant.html'))
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
     
 
 

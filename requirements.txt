@@ -9,3 +9,6 @@ python-dotenv==0.21.1
 plaid==0.1.7
 plaid-python==29.1.0
 bip_utils==2.10.0
+backtesting
+yfinance
+streamlit

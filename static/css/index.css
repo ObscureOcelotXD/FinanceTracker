@@ -56,6 +56,7 @@
             border: 1px solid #1f2937;
             border-radius: 10px;
             padding: 12px 14px;
+            position: relative;
             }
             .metric-label {
             color: #9ca3af;
@@ -66,6 +67,63 @@
             font-size: 1.05rem;
             font-weight: 600;
             color: #e5e7eb;
+            }
+            .metric-label-info {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            }
+            .quant-info-btn {
+            border: none;
+            background: transparent;
+            color: #60a5fa;
+            font-size: 0.95rem;
+            padding: 0;
+            line-height: 1;
+            }
+            .quant-info-btn:hover {
+            color: #93c5fd;
+            }
+            .quant-tooltip {
+            position: absolute;
+            right: 10px;
+            top: 44px;
+            width: min(320px, calc(100vw - 40px));
+            background: rgba(15, 23, 42, 0.98);
+            border: 1px solid rgba(59, 130, 246, 0.5);
+            border-radius: 10px;
+            padding: 10px 12px;
+            box-shadow: 0 0 18px rgba(59, 130, 246, 0.25);
+            display: none;
+            z-index: 10;
+            }
+            .quant-tooltip.is-open {
+            display: block;
+            }
+            .quant-tooltip-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #e5e7eb;
+            margin-bottom: 6px;
+            }
+            .quant-tooltip-body {
+            font-size: 0.8rem;
+            color: #cbd5f5;
+            }
+            .quant-close-btn {
+            border: none;
+            background: transparent;
+            color: #93c5fd;
+            font-size: 0.8rem;
+            padding: 0;
+            }
+            .quant-close-btn {
+            font-size: 1rem;
+            line-height: 1;
             }
             .badge-icon {
             display: inline-block;
