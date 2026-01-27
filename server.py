@@ -47,6 +47,12 @@ def create_flask_app():
         resp.headers["Cache-Control"] = "no-store"
         return resp
 
+    @app.route('/filings')
+    def filings():
+        resp = make_response(render_template('filings.html'))
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
     
 
 

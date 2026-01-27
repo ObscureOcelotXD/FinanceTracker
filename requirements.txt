@@ -12,3 +12,8 @@ bip_utils==2.10.0
 backtesting
 yfinance
 streamlit
+sec-edgar-downloader
+beautifulsoup4
+lxml
+google-genai
+pyrate-limiter>=4.0.0

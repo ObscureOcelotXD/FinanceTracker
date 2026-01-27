@@ -229,6 +229,25 @@ def init_db():
         )
     """)
 
+    cur13 = con.cursor()
+    cur13.execute("""
+        CREATE TABLE IF NOT EXISTS sec_filing_summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_hash TEXT NOT NULL,
+            ticker TEXT,
+            filing_type TEXT,
+            filing_date TEXT,
+            source_path TEXT,
+            summary_text TEXT,
+            model TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+    cur13.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_sec_filing_doc_hash
+        ON sec_filing_summaries (doc_hash)
+    """)
+
     con.commit()
     con.close()
 
@@ -490,6 +509,7 @@ def wipe_all_data(force: bool = False):
     _safe_delete("benchmark_prices")
     _safe_delete("etf_sector_breakdown")
     _safe_delete("etf_sources")
+    _safe_delete("sec_filing_summaries")
     conn.commit()
     conn.close()
 
@@ -515,6 +535,121 @@ def insert_transactions(transactions):
     conn.commit()
     conn.close()
 #endregion
+
+
+def get_sec_summary(doc_hash: str):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT doc_hash, ticker, filing_type, filing_date, source_path, summary_text, model, created_at
+        FROM sec_filing_summaries
+        WHERE doc_hash = ?
+        """,
+        (doc_hash,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "doc_hash": row[0],
+        "ticker": row[1],
+        "filing_type": row[2],
+        "filing_date": row[3],
+        "source_path": row[4],
+        "summary_text": row[5],
+        "model": row[6],
+        "created_at": row[7],
+    }
+
+
+def upsert_sec_summary(
+    doc_hash: str,
+    ticker: str,
+    filing_type: str,
+    filing_date: str,
+    source_path: str,
+    summary_text: str,
+    model: str,
+):
+    conn = get_connection()
+    cur = conn.cursor()
+    created_at = datetime.utcnow().isoformat()
+    cur.execute(
+        """
+        INSERT INTO sec_filing_summaries
+            (doc_hash, ticker, filing_type, filing_date, source_path, summary_text, model, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(doc_hash) DO UPDATE SET
+            ticker=excluded.ticker,
+            filing_type=excluded.filing_type,
+            filing_date=excluded.filing_date,
+            source_path=excluded.source_path,
+            summary_text=excluded.summary_text,
+            model=excluded.model,
+            created_at=excluded.created_at
+        """,
+        (doc_hash, ticker, filing_type, filing_date, source_path, summary_text, model, created_at),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_sec_summaries(limit: int = 50, ticker: str | None = None, filing_type: str | None = None):
+    conn = get_connection()
+    cur = conn.cursor()
+    where = []
+    params = []
+    if ticker:
+        where.append("ticker = ?")
+        params.append(ticker)
+    if filing_type:
+        where.append("filing_type = ?")
+        params.append(filing_type)
+    where_clause = f"WHERE {' AND '.join(where)}" if where else ""
+    cur.execute(
+        f"""
+        SELECT doc_hash, ticker, filing_type, filing_date, source_path, summary_text, model, created_at
+        FROM sec_filing_summaries
+        {where_clause}
+        ORDER BY created_at DESC
+        LIMIT ?
+        """,
+        (*params, limit),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    results = []
+    for row in rows:
+        results.append({
+            "doc_hash": row[0],
+            "ticker": row[1],
+            "filing_type": row[2],
+            "filing_date": row[3],
+            "source_path": row[4],
+            "summary_text": row[5],
+            "model": row[6],
+            "created_at": row[7],
+        })
+    return results
+
+
+def delete_sec_summaries(ticker: str | None = None, filing_type: str | None = None):
+    conn = get_connection()
+    cur = conn.cursor()
+    where = []
+    params = []
+    if ticker:
+        where.append("ticker = ?")
+        params.append(ticker)
+    if filing_type:
+        where.append("filing_type = ?")
+        params.append(filing_type)
+    where_clause = f"WHERE {' AND '.join(where)}" if where else ""
+    cur.execute(f"DELETE FROM sec_filing_summaries {where_clause}", params)
+    conn.commit()
+    conn.close()
 
 
 # region Data Retrieval for Dash App using Pandas DataFrame

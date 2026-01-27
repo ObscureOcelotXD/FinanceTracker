@@ -22,3 +22,5 @@ finance_data.csv
 .env
 finance_data.db
 tempCodeRunnerFile.py
+sec-edgar-filings/
+sec_filings/

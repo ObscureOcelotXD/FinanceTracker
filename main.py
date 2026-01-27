@@ -8,15 +8,15 @@ from pathlib import Path
 
 if __name__ == '__main__':
     try:
-        def start_streamlit():
+        def start_streamlit_app(script_name: str, port: str):
             auto_start = os.getenv("STREAMLIT_AUTO_START", "true").strip().lower() in {"1", "true", "yes", "y", "on"}
             if not auto_start:
                 print("ℹ️ Streamlit auto-start disabled.")
                 return None
             root = Path(__file__).resolve().parent
-            script_path = root / "streamlit_backtest.py"
+            script_path = root / script_name
             if not script_path.exists():
-                print("⚠️ streamlit_backtest.py not found. Skipping Streamlit.")
+                print(f"⚠️ {script_name} not found. Skipping Streamlit.")
                 return None
             cmd = [
                 sys.executable,
@@ -25,7 +25,7 @@ if __name__ == '__main__':
                 "run",
                 str(script_path),
                 "--server.port",
-                "8501",
+                port,
                 "--server.headless",
                 "true",
             ]
@@ -34,12 +34,15 @@ if __name__ == '__main__':
             except Exception as exc:
                 print(f"⚠️ Failed to start Streamlit: {exc}")
                 return None
-            print("🚀 Starting Streamlit on http://127.0.0.1:8501")
+            print(f"🚀 Starting Streamlit on http://127.0.0.1:{port}")
             return proc
 
-        streamlit_proc = start_streamlit()
-        if streamlit_proc:
-            atexit.register(lambda: streamlit_proc.terminate())
+        backtest_proc = start_streamlit_app("streamlit_backtest.py", "8501")
+        filings_proc = start_streamlit_app("filings.py", "8502")
+        if backtest_proc:
+            atexit.register(lambda: backtest_proc.terminate())
+        if filings_proc:
+            atexit.register(lambda: filings_proc.terminate())
 
         # Initialize Dash before the Flask server handles any requests.
         import dashApp as dashApp
