@@ -42,3 +42,15 @@ verification later:
 
 - `UMBREL_LIGHTNING_CA_BUNDLE` = path to your CA cert file
 - `UMBREL_LIGHTNING_VERIFY_SSL` = `true`
+
+## SEC Filings Summaries (Flow)
+
+When you click **Fetch & Summarize** in the SEC Filings page, the app:
+
+- Reads inputs (tickers, types, date, cache options)
+- Initializes the database and prunes old filings
+- Downloads the newest filing (if not already cached locally)
+- Extracts plain text from the filing
+- Splits the text into chunks
+- Summarizes with Groq (primary), then Gemini (fallback)
+- Saves the summary and metadata in `sec_filing_summaries`

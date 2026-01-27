@@ -263,7 +263,25 @@ def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, max_chunks: int = MAX_C
 
 
 def _guess_filing_date(path: Path) -> str:
-    match = re.search(r"\d{4}-\d{2}-\d{2}", str(path))
+    try:
+        with path.open("r", errors="ignore") as handle:
+            header = handle.read(20000)
+    except OSError:
+        header = ""
+
+    def _extract(label: str) -> Optional[str]:
+        match = re.search(rf"{label}:\s*(\d{{8}})", header)
+        if not match:
+            return None
+        raw = match.group(1)
+        return f"{raw[0:4]}-{raw[4:6]}-{raw[6:8]}"
+
+    for label in ("FILED AS OF DATE", "FILING DATE", "CONFORMED PERIOD OF REPORT"):
+        parsed = _extract(label)
+        if parsed:
+            return parsed
+
+    match = re.search(r"\b(19|20)\d{2}-\d{2}-\d{2}\b", str(path))
     if match:
         return match.group(0)
     return date.fromtimestamp(path.stat().st_mtime).isoformat()
