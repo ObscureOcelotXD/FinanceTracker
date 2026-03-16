@@ -1,0 +1,2 @@
+# Pin coincurve to 20.x so pip doesn't try to install 21.x (build bug on Python 3.14)
+coincurve>=20,<21

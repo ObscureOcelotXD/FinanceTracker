@@ -844,13 +844,24 @@ if (geckoBtn) {
       .then(response => response.json())
       .then(data => {
         if (data.error) {
-          document.getElementById('coldStorageStatus').innerText = "Not configured";
+          document.getElementById('coldStorageStatus').innerText = "Error";
+          document.getElementById('coldStorageStatus').title = data.error;
           document.getElementById('coldBtcBalance').innerText = "—";
           document.getElementById('coldBtcConfirmed').innerText = "—";
           document.getElementById('coldBtcUnconfirmed').innerText = "—";
           console.error("Cold storage error:", data.error);
           return;
         }
+        if (data.enabled === false) {
+          document.getElementById('coldStorageStatus').innerText = "Not installed";
+          document.getElementById('coldStorageStatus').title = data.error || "bip_utils not installed";
+          document.getElementById('coldBtcBalance').innerText = "—";
+          document.getElementById('coldBtcConfirmed').innerText = "—";
+          document.getElementById('coldBtcUnconfirmed').innerText = "—";
+          return;
+        }
+        document.getElementById('coldStorageStatus').innerText = "OK";
+        document.getElementById('coldStorageStatus').title = "";
         document.getElementById('coldBtcBalance').innerText = `${data.balance_btc.toFixed(8)} BTC`;
         document.getElementById('coldBtcConfirmed').innerText = `${data.confirmed_btc.toFixed(8)} BTC`;
         document.getElementById('coldBtcUnconfirmed').innerText = `${data.unconfirmed_btc.toFixed(8)} BTC`;

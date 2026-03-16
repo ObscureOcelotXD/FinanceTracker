@@ -1,4 +1,11 @@
-import api.btc_wallet_api as btc_wallet_api
+import pytest
+
+try:
+    import api.btc_wallet_api as btc_wallet_api
+except ImportError:
+    btc_wallet_api = None
+
+pytestmark = pytest.mark.skipif(btc_wallet_api is None, reason="bip_utils not installed (btc_wallet_api)")
 
 
 def test_scan_uses_scripthash_methods(monkeypatch):

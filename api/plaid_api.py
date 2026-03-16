@@ -45,13 +45,21 @@ else:
 
 print(f"[Plaid] Environment: {effective_env_name}")
 
-# Plaid client configuration
+# Use environment-specific credentials: sandbox vs production
+if PLAID_ENV == "production":
+    _client_id = os.getenv("PLAID_CLIENT_ID")
+    _secret = os.getenv("PLAID_SECRET")
+else:
+    # Sandbox or development: prefer PLAID_SANDBOX_* for testing, fallback to PLAID_*
+    _client_id = os.getenv("PLAID_SANDBOX_CLIENT_ID") or os.getenv("PLAID_CLIENT_ID")
+    _secret = os.getenv("PLAID_SANDBOX_SECRET") or os.getenv("PLAID_SECRET")
+
 configuration = Configuration(
-    host=environment,  # ✅ Now correctly mapped to Plaid's environment object
+    host=environment,
     api_key={
-        'clientId': os.getenv('PLAID_CLIENT_ID'),
-        'secret': os.getenv('PLAID_SECRET'),
-    }
+        "clientId": _client_id,
+        "secret": _secret,
+    },
 )
 
 api_client = ApiClient(configuration)
@@ -71,9 +79,11 @@ def create_link_token():
             "products": [Products("auth"), Products("transactions"), Products("investments")],
             "country_codes": [CountryCode("US")],
             "language": "en",
-            "redirect_uri": os.getenv("PLAID_REDIRECT_URI"),
         }
-        webhook = os.getenv("PLAID_WEBHOOK")
+        redirect_uri = (os.getenv("PLAID_REDIRECT_URI") or "").strip()
+        if redirect_uri:
+            request_kwargs["redirect_uri"] = redirect_uri
+        webhook = (os.getenv("PLAID_WEBHOOK") or "").strip()
         if webhook:
             request_kwargs["webhook"] = webhook
 

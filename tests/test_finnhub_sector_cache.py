@@ -4,7 +4,7 @@ import api.finnhub_api as finnhub_api
 
 
 def test_polygon_preferred_over_finnhub(monkeypatch):
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     cached_records = {}
     captured = {}
 
@@ -37,7 +37,7 @@ def test_polygon_preferred_over_finnhub(monkeypatch):
 
 
 def test_force_refresh_ignores_cached(monkeypatch):
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     cached_records = {
         "AAPL": {"sector": "Consumer Electronics", "updated_at": now.isoformat()},
     }

@@ -201,7 +201,7 @@ def fetch_company_profile(ticker):
 def get_sector_allocation_map(tickers, refresh_days: int = 7, force_refresh: bool = False):
     cached_records = get_sector_records(tickers)
     cached = {t: rec.get("sector") for t, rec in cached_records.items()}
-    stale_cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=refresh_days)
+    stale_cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=refresh_days)
     missing = []
     if force_refresh:
         print(f"[Sector] Force refresh enabled for {len(tickers)} tickers.")
@@ -209,7 +209,7 @@ def get_sector_allocation_map(tickers, refresh_days: int = 7, force_refresh: boo
         t_upper = t.upper()
         if t_upper in SECTOR_OVERRIDES:
             sector = SECTOR_OVERRIDES[t_upper]
-            upsert_stock_sector(t_upper, sector, datetime.datetime.utcnow().isoformat())
+            upsert_stock_sector(t_upper, sector, datetime.datetime.now(datetime.timezone.utc).isoformat())
             cached[t] = sector
             continue
         if force_refresh:
@@ -236,7 +236,7 @@ def get_sector_allocation_map(tickers, refresh_days: int = 7, force_refresh: boo
             ticker_upper = ticker.upper()
             if ticker_upper in SECTOR_OVERRIDES:
                 sector = SECTOR_OVERRIDES[ticker_upper]
-                upsert_stock_sector(ticker_upper, sector, datetime.datetime.utcnow().isoformat())
+                upsert_stock_sector(ticker_upper, sector, datetime.datetime.now(datetime.timezone.utc).isoformat())
                 cached[ticker] = sector
                 continue
             polygon_sector = polygon_api.get_polygon_industry(ticker_upper)
@@ -256,7 +256,7 @@ def get_sector_allocation_map(tickers, refresh_days: int = 7, force_refresh: boo
                     or "Unknown"
                 )
                 print(f"[Sector] {ticker_upper} -> Finnhub: {sector}")
-            upsert_stock_sector(ticker_upper, sector, datetime.datetime.utcnow().isoformat())
+            upsert_stock_sector(ticker_upper, sector, datetime.datetime.now(datetime.timezone.utc).isoformat())
             cached[ticker] = sector
         except Exception as exc:
             print(f"[Finnhub] Sector fetch failed for {ticker}: {exc}")

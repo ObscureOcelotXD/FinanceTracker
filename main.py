@@ -44,12 +44,13 @@ if __name__ == '__main__':
         if filings_proc:
             atexit.register(lambda: filings_proc.terminate())
 
+        # Initialize DB first; Dash pages query it when they are imported.
+        db_manager.init_db()
+        db_manager.delete_orphan_stock_prices()
+
         # Initialize Dash before the Flask server handles any requests.
         import dashApp as dashApp
         import dash_callbacks
-
-        db_manager.init_db()
-        db_manager.delete_orphan_stock_prices()
 
         # Update stock prices needs to run here so db has time to initialize.
         import api.finnhub_api as finnhub

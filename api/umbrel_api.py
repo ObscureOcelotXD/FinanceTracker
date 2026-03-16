@@ -43,35 +43,28 @@ def call_umbrel_rpc(method, params=None):
     except Exception as e:
         return {"error": str(e)}
 
+def _umbrel_json(data, result_key, value):
+    """Return 200 JSON with result or error so frontend can always parse and show message."""
+    if "result" in data:
+        return jsonify({result_key: data["result"]})
+    return jsonify({"error": data.get("error", str(data))})
+
 @umbrel_api.route('/umbrel/blockcount', methods=['GET'])
 def umbrel_blockcount():
     data = call_umbrel_rpc("getblockcount")
-    if "result" in data:
-        return jsonify({"block_count": data["result"]})
-    else:
-        return jsonify({"error": data.get("error", data)}), 500
+    return _umbrel_json(data, "block_count", data.get("result"))
 
 @umbrel_api.route('/umbrel/networkhashps', methods=['GET'])
 def umbrel_networkhashps():
     data = call_umbrel_rpc("getnetworkhashps")
-    if "result" in data:
-        return jsonify({"networkhashps": data["result"]})
-    else:
-        return jsonify({"error": data.get("error", data)}), 500
+    return _umbrel_json(data, "networkhashps", data.get("result"))
 
 @umbrel_api.route('/umbrel/mempoolinfo', methods=['GET'])
 def umbrel_mempoolinfo():
     data = call_umbrel_rpc("getmempoolinfo")
-    if "result" in data:
-        return jsonify({"mempoolinfo": data["result"]})
-    else:
-        return jsonify({"error": data.get("error", data)}), 500
+    return _umbrel_json(data, "mempoolinfo", data.get("result"))
 
 @umbrel_api.route('/umbrel/estimatesmartfee', methods=['GET'])
 def umbrel_estimatesmartfee():
-    # Example: estimatesmartfee for 6 blocks target confirmation time
     data = call_umbrel_rpc("estimatesmartfee", [6])
-    if "result" in data:
-        return jsonify({"estimatesmartfee": data["result"]})
-    else:
-        return jsonify({"error": data.get("error", data)}), 500
+    return _umbrel_json(data, "estimatesmartfee", data.get("result"))

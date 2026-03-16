@@ -170,7 +170,7 @@ def wallet_summary():
             used_addresses, used_scripthashes, scanned = _scan_addresses(client, xpub, gap_limit, address_type)
             confirmed, unconfirmed = _sum_balances(client, used_scripthashes)
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": str(exc)})
 
     total = confirmed + unconfirmed
     result = {

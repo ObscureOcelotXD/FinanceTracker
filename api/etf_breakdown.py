@@ -299,7 +299,7 @@ def _is_stale(updated_at, refresh_days):
         updated = dt.datetime.fromisoformat(updated_at)
     except ValueError:
         return True
-    return (dt.datetime.utcnow() - updated) > dt.timedelta(days=refresh_days)
+    return (dt.datetime.now(dt.timezone.utc) - updated) > dt.timedelta(days=refresh_days)
 
 
 def get_sector_breakdown(symbol, refresh_days=7):
@@ -349,7 +349,7 @@ def get_sector_breakdown(symbol, refresh_days=7):
 
     if weights:
         db_manager.clear_etf_sector_breakdown(symbol)
-        now = dt.datetime.utcnow().isoformat()
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
         for sector, weight in weights.items():
             db_manager.upsert_etf_sector_breakdown(
                 symbol,

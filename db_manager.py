@@ -1,6 +1,6 @@
 import sqlite3
-from datetime import datetime
-import sqlite3
+from datetime import datetime, timezone
+from typing import Optional
 import pandas as pd
 import re
 DATABASE = "finance_data.db"
@@ -575,7 +575,7 @@ def upsert_sec_summary(
 ):
     conn = get_connection()
     cur = conn.cursor()
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now(timezone.utc).isoformat()
     cur.execute(
         """
         INSERT INTO sec_filing_summaries
@@ -596,7 +596,7 @@ def upsert_sec_summary(
     conn.close()
 
 
-def get_sec_summaries(limit: int = 50, ticker: str | None = None, filing_type: str | None = None):
+def get_sec_summaries(limit: int = 50, ticker: Optional[str] = None, filing_type: Optional[str] = None):
     conn = get_connection()
     cur = conn.cursor()
     where = []
@@ -635,7 +635,7 @@ def get_sec_summaries(limit: int = 50, ticker: str | None = None, filing_type: s
     return results
 
 
-def delete_sec_summaries(ticker: str | None = None, filing_type: str | None = None):
+def delete_sec_summaries(ticker: Optional[str] = None, filing_type: Optional[str] = None):
     conn = get_connection()
     cur = conn.cursor()
     where = []
@@ -870,7 +870,7 @@ def upsert_benchmark_price(symbol, date, closing_price, source=None, updated_at=
     conn = get_connection()
     cur = conn.cursor()
     if updated_at is None:
-        updated_at = datetime.utcnow().isoformat()
+        updated_at = datetime.now(timezone.utc).isoformat()
     cur.execute(
         "SELECT id FROM benchmark_prices WHERE symbol = ? AND date = ?",
         (symbol, date),
@@ -925,7 +925,7 @@ def upsert_etf_sector_breakdown(symbol, sector, weight, source=None, updated_at=
     conn = get_connection()
     cur = conn.cursor()
     if updated_at is None:
-        updated_at = datetime.utcnow().isoformat()
+        updated_at = datetime.now(timezone.utc).isoformat()
     cur.execute(
         "SELECT id FROM etf_sector_breakdown WHERE symbol = ? AND sector = ?",
         (symbol, sector),
@@ -972,7 +972,7 @@ def get_etf_source(symbol):
 
 def upsert_etf_source(symbol, source_type, url=None, updated_at=None):
     if updated_at is None:
-        updated_at = datetime.utcnow().isoformat()
+        updated_at = datetime.now(timezone.utc).isoformat()
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(

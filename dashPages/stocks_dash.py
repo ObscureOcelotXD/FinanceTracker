@@ -196,9 +196,9 @@ def force_update_table(n_clicks, current_counter):
             sector_map = finnhub_api.get_sector_allocation_map(tickers, force_refresh=True)
             print(f"[Sector] Force refresh complete. Count={len(sector_map)}")
         # Just increment the counter → this will trigger your existing load_stocks_table callback
-        return (current_counter or 0) + 1, "Prices F*cking Updated!", True, "danger", "Force Update Table", False, False, dt.datetime.utcnow().isoformat()
+        return (current_counter or 0) + 1, "Prices F*cking Updated!", True, "danger", "Force Update Table", False, False, dt.datetime.now(dt.timezone.utc).isoformat()
     except Exception as exc:
-        return dash.no_update, f"Update failed: {exc}", True, "danger", "Force Update Table", False, False, dt.datetime.utcnow().isoformat()
+        return dash.no_update, f"Update failed: {exc}", True, "danger", "Force Update Table", False, False, dt.datetime.now(dt.timezone.utc).isoformat()
     
     
 # Page layout

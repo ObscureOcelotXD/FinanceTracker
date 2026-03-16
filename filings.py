@@ -287,7 +287,7 @@ def _guess_filing_date(path: Path) -> str:
     return date.fromtimestamp(path.stat().st_mtime).isoformat()
 
 
-def _pick_model(client, override: str | None) -> str:
+def _pick_model(client, override: Optional[str]) -> str:
     try:
         available = [m.name for m in client.models.list()]
     except Exception:

@@ -51,6 +51,5 @@ def get_lightning_info():
 @umbrel_lightning_api.route('/umbrel/lightning/getinfo', methods=['GET'])
 def lightning_getinfo():
     data = get_lightning_info()
-    if "error" in data:
-        return jsonify({"error": data["error"]}), 500
+    # Return 200 with error in body so frontend can parse JSON and show message (no 500)
     return jsonify(data)

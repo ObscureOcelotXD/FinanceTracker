@@ -1,19 +1,30 @@
-Flask==3.0.3
-dash==3.4.0
-dash-bootstrap-components==2.0.4
-plotly==6.0.0
-pandas==2.2.3
-numpy==2.2.2
-requests==2.32.3
-python-dotenv==0.21.1
-plaid==0.1.7
-plaid-python==29.1.0
-bip_utils==2.10.0
-backtesting
-yfinance
-streamlit
-sec-edgar-downloader
-beautifulsoup4
-lxml
-google-genai
-pyrate-limiter>=4.0.0
+# Core web
+Flask>=3.0.3
+dash>=3.4.0
+dash-bootstrap-components>=2.0.4
+plotly>=6.0.0
+
+# Data
+pandas>=2.0.0
+numpy>=2.0.0
+
+# HTTP & env
+requests>=2.32.3
+python-dotenv>=1.0.0
+
+# Plaid (official SDK; provides the "plaid" namespace)
+plaid-python>=29.1.0
+
+# Finance & backtesting
+backtesting>=0.4.0
+yfinance>=0.2.0
+
+# SEC & docs
+streamlit>=1.28.0
+sec-edgar-downloader>=4.0.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+
+# AI / summarization
+google-genai>=0.3.0
+pyrate-limiter>=3.0.0
