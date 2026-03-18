@@ -165,7 +165,12 @@ def update_sector_chart(n_intervals, store_data):
 def update_total_net_worth(n_intervals, store_data):
     df = db_manager.get_value_stocks()
     total_value = df["position_value"].sum() if not df.empty else 0
-    return f"Total stock value: ${total_value:,.2f}"
+    return html.Span(
+        [
+            html.Span("Total stock value: "),
+            html.Span(f"${total_value:,.2f}", className="privacy-sensitive-text"),
+        ]
+    )
 
 # 2. Add a new callback (or extend existing one) that reacts to the button
 @dash_app.callback(
@@ -357,7 +362,7 @@ layout = html.Div(
                                 ]
                             ),
                         ],
-                        className="mb-4 neon-panel neon-green",
+                        className="mb-4 neon-panel neon-green privacy-sensitive-visual",
                     ),
                     width=12,
                 )
@@ -437,7 +442,7 @@ layout = html.Div(
                                 ]
                             ),
                         ],
-                        className="mb-4 neon-panel neon-yellow",
+                        className="mb-4 neon-panel neon-yellow privacy-sensitive-visual",
                     ),
                     width=12,
                 )

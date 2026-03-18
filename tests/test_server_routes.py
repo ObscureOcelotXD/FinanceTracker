@@ -25,6 +25,8 @@ def client(temp_db):
 def test_index_returns_200(client):
     r = client.get("/")
     assert r.status_code == 200
+    assert b"Privacy Mode" in r.data
+    assert b'privacyModeSelect' in r.data
 
 
 def test_quant_returns_200(client):

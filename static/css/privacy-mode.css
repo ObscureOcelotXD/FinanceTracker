@@ -1,0 +1,72 @@
+.privacy-mode-badge {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2000;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #e5e7eb;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  font-size: 0.85rem;
+  backdrop-filter: blur(6px);
+}
+
+.privacy-mode-badge.is-visible {
+  display: inline-flex;
+}
+
+.privacy-mode-badge strong {
+  color: #f8fafc;
+}
+
+.privacy-sensitive-visual {
+  position: relative;
+}
+
+body[data-privacy-mode="masked"] .privacy-sensitive-visual.privacy-visual-active > *:not(.privacy-visual-overlay) {
+  filter: blur(10px);
+  user-select: none;
+}
+
+body[data-privacy-mode="demo"] .privacy-sensitive-visual.privacy-visual-active > *:not(.privacy-visual-overlay) {
+  filter: blur(2px) saturate(0.9);
+  user-select: none;
+}
+
+.privacy-visual-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+  border-radius: inherit;
+  background: rgba(15, 23, 42, 0.55);
+  color: #f8fafc;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
+.privacy-sensitive-visual.privacy-visual-active > .privacy-visual-overlay {
+  display: flex;
+}
+
+body[data-privacy-mode="demo"] .privacy-sensitive-visual.privacy-visual-active > .privacy-visual-overlay {
+  inset: auto 10px 10px auto;
+  display: inline-flex;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  font-size: 0.75rem;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(6px);
+}

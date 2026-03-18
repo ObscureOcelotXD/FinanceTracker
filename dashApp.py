@@ -10,7 +10,8 @@ dash_app = Dash(
     __name__,
     server=flask_app,
     url_base_pathname='/dashboard/',
-    external_stylesheets=[dbc.themes.DARKLY],
+    external_stylesheets=[dbc.themes.DARKLY, "/static/css/privacy-mode.css"],
+    external_scripts=["/static/js/privacy-mode.js"],
     suppress_callback_exceptions=True,
     use_pages=True, 
     pages_folder='dashPages'

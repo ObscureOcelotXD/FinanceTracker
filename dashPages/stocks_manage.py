@@ -1,6 +1,6 @@
 import dash
-from dash import html, dcc, dash_table, ctx
-from dash.dash_table import FormatTemplate
+from dash import html, dcc, ctx
+from dash.dash_table import DataTable, FormatTemplate
 import dash_bootstrap_components as dbc
 import db_manager
 from dash.dependencies import Output, Input, State
@@ -167,99 +167,102 @@ dash.register_page(
                                     ],
                                     className="mb-3",
                                 ),
-                                dash_table.DataTable(
-                                    id="stocks-table",
-                                    editable=True,
-                                    cell_selectable=True,
-                                    row_deletable=False,
-                                    row_selectable="single",
-                                    columns=[
-                                        {"name": "Ticker", "id": "ticker"},
-                                        {"name": "Shares", "id": "shares", "type": "numeric", "editable": True},
-                                        {
-                                            "name": "Cost Basis",
-                                            "id": "cost_basis",
-                                            "type": "numeric",
-                                            "format": FormatTemplate.money(2),
-                                            "editable": True,
-                                        },
-                                        {
-                                            "name": "Position Value",
-                                            "id": "position_value",
-                                            "type": "numeric",
-                                            "format": FormatTemplate.money(2),
-                                        },
-                                        {
-                                            "name": "Gain/Loss",
-                                            "id": "gain_loss",
-                                            "type": "numeric",
-                                            "format": FormatTemplate.money(2),
-                                        },
-                                        {
-                                            "name": "% Gain",
-                                            "id": "gain_loss_pct",
-                                            "type": "numeric",
-                                            "format": FormatTemplate.percentage(2),
-                                        },
-                                    ],
-                                    data=[],
-                                    style_table={"overflowX": "auto"},
-                                    style_cell={"textAlign": "center"},
-                                    style_header={"backgroundColor": "#1f2c3b", "fontWeight": "bold"},
-                                    style_data={"backgroundColor": "#11181f"},
-                                    style_data_conditional=[
-                                        {
-                                            "if": {"filter_query": "{ticker} = 'TOTAL'"},
-                                            "backgroundColor": "#1a242f",
-                                            "fontWeight": "bold",
-                                        },
-                                        {
-                                            "if": {"filter_query": "{ticker} = 'TOTAL'"},
-                                            "pointerEvents": "none",
-                                        },
-                                        {
-                                            "if": {
-                                                "filter_query": "{gain_loss} > 0",
-                                                "column_id": "gain_loss",
+                                html.Div(
+                                    DataTable(
+                                        id="stocks-table",
+                                        editable=True,
+                                        cell_selectable=True,
+                                        row_deletable=False,
+                                        row_selectable="single",
+                                        columns=[
+                                            {"name": "Ticker", "id": "ticker"},
+                                            {"name": "Shares", "id": "shares", "type": "numeric", "editable": True},
+                                            {
+                                                "name": "Cost Basis",
+                                                "id": "cost_basis",
+                                                "type": "numeric",
+                                                "format": FormatTemplate.money(2),
+                                                "editable": True,
                                             },
-                                            "color": "#22c55e",
-                                        },
-                                        {
-                                            "if": {
-                                                "filter_query": "{gain_loss} < 0",
-                                                "column_id": "gain_loss",
+                                            {
+                                                "name": "Position Value",
+                                                "id": "position_value",
+                                                "type": "numeric",
+                                                "format": FormatTemplate.money(2),
                                             },
-                                            "color": "#ef4444",
-                                        },
-                                        {
-                                            "if": {
-                                                "filter_query": "{gain_loss_pct} > 0",
-                                                "column_id": "gain_loss_pct",
+                                            {
+                                                "name": "Gain/Loss",
+                                                "id": "gain_loss",
+                                                "type": "numeric",
+                                                "format": FormatTemplate.money(2),
                                             },
-                                            "color": "#22c55e",
-                                        },
-                                        {
-                                            "if": {
-                                                "filter_query": "{gain_loss_pct} < 0",
-                                                "column_id": "gain_loss_pct",
+                                            {
+                                                "name": "% Gain",
+                                                "id": "gain_loss_pct",
+                                                "type": "numeric",
+                                                "format": FormatTemplate.percentage(2),
                                             },
-                                            "color": "#ef4444",
-                                        },
-                                        {
-                                            "if": {"state": "active"},
-                                            "backgroundColor": "#ffffff",
-                                            "color": "#000000",
-                                            "border": "1px solid #000000",
-                                        },
-                                        {
-                                            "if": {"state": "selected"},
-                                            "backgroundColor": "#11181f",
-                                            "color": "#ffffff",
-                                        },
-                                    ],
-                                    filter_action="native",
-                                    sort_action="native",
-                                    page_size=10,
+                                        ],
+                                        data=[],
+                                        style_table={"overflowX": "auto"},
+                                        style_cell={"textAlign": "center"},
+                                        style_header={"backgroundColor": "#1f2c3b", "fontWeight": "bold"},
+                                        style_data={"backgroundColor": "#11181f"},
+                                        style_data_conditional=[
+                                            {
+                                                "if": {"filter_query": "{ticker} = 'TOTAL'"},
+                                                "backgroundColor": "#1a242f",
+                                                "fontWeight": "bold",
+                                            },
+                                            {
+                                                "if": {"filter_query": "{ticker} = 'TOTAL'"},
+                                                "pointerEvents": "none",
+                                            },
+                                            {
+                                                "if": {
+                                                    "filter_query": "{gain_loss} > 0",
+                                                    "column_id": "gain_loss",
+                                                },
+                                                "color": "#22c55e",
+                                            },
+                                            {
+                                                "if": {
+                                                    "filter_query": "{gain_loss} < 0",
+                                                    "column_id": "gain_loss",
+                                                },
+                                                "color": "#ef4444",
+                                            },
+                                            {
+                                                "if": {
+                                                    "filter_query": "{gain_loss_pct} > 0",
+                                                    "column_id": "gain_loss_pct",
+                                                },
+                                                "color": "#22c55e",
+                                            },
+                                            {
+                                                "if": {
+                                                    "filter_query": "{gain_loss_pct} < 0",
+                                                    "column_id": "gain_loss_pct",
+                                                },
+                                                "color": "#ef4444",
+                                            },
+                                            {
+                                                "if": {"state": "active"},
+                                                "backgroundColor": "#ffffff",
+                                                "color": "#000000",
+                                                "border": "1px solid #000000",
+                                            },
+                                            {
+                                                "if": {"state": "selected"},
+                                                "backgroundColor": "#11181f",
+                                                "color": "#ffffff",
+                                            },
+                                        ],
+                                        filter_action="native",
+                                        sort_action="native",
+                                        page_size=10,
+                                    ),
+                                    className="privacy-sensitive-visual",
                                 ),
                                 html.Br(),
                                 dbc.Row(
@@ -359,75 +362,78 @@ dash.register_page(
                                     ],
                                     className="mb-3",
                                 ),
-                                dash_table.DataTable(
-                                    id="plaid-holdings-table",
-                                    row_deletable=False,
-                                    row_selectable=False,
-                                    columns=[
-                                        {"name": "Institution", "id": "institution_name"},
-                                        {"name": "Account", "id": "account_name"},
-                                        {"name": "Ticker", "id": "ticker"},
-                                        {"name": "Shares", "id": "shares", "type": "numeric"},
-                                        {
-                                            "name": "Cost Basis",
-                                            "id": "cost_basis",
-                                            "type": "numeric",
-                                            "format": FormatTemplate.money(2),
-                                        },
-                                        {
-                                            "name": "Position Value",
-                                            "id": "position_value",
-                                            "type": "numeric",
-                                            "format": FormatTemplate.money(2),
-                                        },
-                                        {
-                                            "name": "Gain/Loss",
-                                            "id": "gain_loss",
-                                            "type": "numeric",
-                                            "format": FormatTemplate.money(2),
-                                        },
-                                        {
-                                            "name": "% Gain",
-                                            "id": "gain_loss_pct",
-                                            "type": "numeric",
-                                            "format": FormatTemplate.percentage(2),
-                                        },
-                                    ],
-                                    data=[],
-                                    style_table={"overflowX": "auto"},
-                                    style_cell={"textAlign": "center"},
-                                    style_header={"backgroundColor": "#1f2c3b", "fontWeight": "bold"},
-                                    style_data={"backgroundColor": "#11181f"},
-                                    style_data_conditional=[
-                                        {
-                                            "if": {"filter_query": "{ticker} = 'TOTAL'"},
-                                            "backgroundColor": "#1a242f",
-                                            "fontWeight": "bold",
-                                        },
-                                        {
-                                            "if": {"filter_query": "{ticker} = 'TOTAL'"},
-                                            "pointerEvents": "none",
-                                        },
-                                        {
-                                            "if": {"filter_query": "{gain_loss} > 0", "column_id": "gain_loss"},
-                                            "color": "#22c55e",
-                                        },
-                                        {
-                                            "if": {"filter_query": "{gain_loss} < 0", "column_id": "gain_loss"},
-                                            "color": "#ef4444",
-                                        },
-                                        {
-                                            "if": {"filter_query": "{gain_loss_pct} > 0", "column_id": "gain_loss_pct"},
-                                            "color": "#22c55e",
-                                        },
-                                        {
-                                            "if": {"filter_query": "{gain_loss_pct} < 0", "column_id": "gain_loss_pct"},
-                                            "color": "#ef4444",
-                                        },
-                                    ],
-                                    filter_action="native",
-                                    sort_action="native",
-                                    page_size=10,
+                                html.Div(
+                                    DataTable(
+                                        id="plaid-holdings-table",
+                                        row_deletable=False,
+                                        row_selectable=False,
+                                        columns=[
+                                            {"name": "Institution", "id": "institution_name"},
+                                            {"name": "Account", "id": "account_name"},
+                                            {"name": "Ticker", "id": "ticker"},
+                                            {"name": "Shares", "id": "shares", "type": "numeric"},
+                                            {
+                                                "name": "Cost Basis",
+                                                "id": "cost_basis",
+                                                "type": "numeric",
+                                                "format": FormatTemplate.money(2),
+                                            },
+                                            {
+                                                "name": "Position Value",
+                                                "id": "position_value",
+                                                "type": "numeric",
+                                                "format": FormatTemplate.money(2),
+                                            },
+                                            {
+                                                "name": "Gain/Loss",
+                                                "id": "gain_loss",
+                                                "type": "numeric",
+                                                "format": FormatTemplate.money(2),
+                                            },
+                                            {
+                                                "name": "% Gain",
+                                                "id": "gain_loss_pct",
+                                                "type": "numeric",
+                                                "format": FormatTemplate.percentage(2),
+                                            },
+                                        ],
+                                        data=[],
+                                        style_table={"overflowX": "auto"},
+                                        style_cell={"textAlign": "center"},
+                                        style_header={"backgroundColor": "#1f2c3b", "fontWeight": "bold"},
+                                        style_data={"backgroundColor": "#11181f"},
+                                        style_data_conditional=[
+                                            {
+                                                "if": {"filter_query": "{ticker} = 'TOTAL'"},
+                                                "backgroundColor": "#1a242f",
+                                                "fontWeight": "bold",
+                                            },
+                                            {
+                                                "if": {"filter_query": "{ticker} = 'TOTAL'"},
+                                                "pointerEvents": "none",
+                                            },
+                                            {
+                                                "if": {"filter_query": "{gain_loss} > 0", "column_id": "gain_loss"},
+                                                "color": "#22c55e",
+                                            },
+                                            {
+                                                "if": {"filter_query": "{gain_loss} < 0", "column_id": "gain_loss"},
+                                                "color": "#ef4444",
+                                            },
+                                            {
+                                                "if": {"filter_query": "{gain_loss_pct} > 0", "column_id": "gain_loss_pct"},
+                                                "color": "#22c55e",
+                                            },
+                                            {
+                                                "if": {"filter_query": "{gain_loss_pct} < 0", "column_id": "gain_loss_pct"},
+                                                "color": "#ef4444",
+                                            },
+                                        ],
+                                        filter_action="native",
+                                        sort_action="native",
+                                        page_size=10,
+                                    ),
+                                    className="privacy-sensitive-visual",
                                 ),
                             ]
                         ),
@@ -592,7 +598,7 @@ def toggle_columns(hidden_columns):
     prevent_initial_call=True,
 )
 def clear_active_cell(n_clicks):
-    return None, [], []
+    return None, [], dash.no_update
 
 
 @dash.callback(

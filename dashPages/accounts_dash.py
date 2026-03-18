@@ -23,12 +23,12 @@ dash.register_page(
                 children=[
                     html.Div(
                         dcc.Graph(id='sample-graph'),
-                        className="card",
+                        className="card privacy-sensitive-visual",
                         style={"display": "inline-block", "verticalAlign": "top", "width": "45%", "margin": "10px"}
                     ),
                     html.Div(
                         dcc.Graph(id='pie-chart'),
-                        className="card",
+                        className="card privacy-sensitive-visual",
                         style={"display": "inline-block", "verticalAlign": "top", "width": "45%", "margin": "10px"}
                     )
                 ],
@@ -39,7 +39,7 @@ dash.register_page(
                 children=[
                     dcc.Graph(id='line-graph')
                 ],
-                className="card",
+                className="card privacy-sensitive-visual",
                 style={"width": "90%", "margin": "20px auto"}
             )
         ],

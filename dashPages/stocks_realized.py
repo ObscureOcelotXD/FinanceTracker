@@ -1,7 +1,7 @@
 # stocks_realized.py
 import dash
-from dash import html, dcc, dash_table, ctx
-from dash.dash_table import FormatTemplate
+from dash import html, dcc, ctx
+from dash.dash_table import DataTable, FormatTemplate
 import dash_bootstrap_components as dbc
 import db_manager
 import pandas as pd
@@ -214,7 +214,7 @@ dash.register_page(
                                         className="mb-3",
                                     ),
                                     html.Button(id="clear-realized-active-cell-btn", style={"display": "none"}),
-                                    dash_table.DataTable(
+                                    DataTable(
                                         id="realized-table",
                                         editable=True,
                                         cell_selectable=True,
@@ -338,7 +338,7 @@ dash.register_page(
                                 ]
                             ),
                         ],
-                        className="mb-4 neon-panel neon-yellow",
+                        className="mb-4 neon-panel neon-yellow privacy-sensitive-visual",
                     ),
                     width={"size": 10, "offset": 1},
                 )
@@ -530,7 +530,7 @@ def delete_realized_selected(submit_n_clicks, selected_rows, current, store_data
     prevent_initial_call=True,
 )
 def clear_realized_active_cell(n_clicks):
-    return None, [], []
+    return None, [], dash.no_update
 
 
 @dash.callback(
