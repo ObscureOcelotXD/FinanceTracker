@@ -189,7 +189,7 @@ def update_total_net_worth(n_intervals, store_data):
 def force_update_table(n_clicks, current_counter):
     print(f"Callback triggered! n_clicks: {n_clicks}, current_counter: {current_counter}")
     if n_clicks is None:
-        return False, "", False, "info", "Force Update Table", False, True, ""
+        return False, "", False, "info", "Refresh Prices", False, True, ""
     # Call the update function with forceUpdate=True
     try:
         from api.finnhub_api import update_stock_prices
@@ -201,9 +201,9 @@ def force_update_table(n_clicks, current_counter):
             sector_map = finnhub_api.get_sector_allocation_map(tickers, force_refresh=True)
             print(f"[Sector] Force refresh complete. Count={len(sector_map)}")
         # Just increment the counter → this will trigger your existing load_stocks_table callback
-        return (current_counter or 0) + 1, "Prices F*cking Updated!", True, "danger", "Force Update Table", False, False, dt.datetime.now(dt.timezone.utc).isoformat()
+        return (current_counter or 0) + 1, "Prices updated.", True, "success", "Refresh Prices", False, False, dt.datetime.now(dt.timezone.utc).isoformat()
     except Exception as exc:
-        return dash.no_update, f"Update failed: {exc}", True, "danger", "Force Update Table", False, False, dt.datetime.now(dt.timezone.utc).isoformat()
+        return dash.no_update, f"Update failed: {exc}", True, "danger", "Refresh Prices", False, False, dt.datetime.now(dt.timezone.utc).isoformat()
     
     
 # Page layout
@@ -267,7 +267,7 @@ layout = html.Div(
             [
                 dbc.Col(
                     dbc.Button(
-                        "Force Update Table",
+                        "Refresh Prices",
                         id="force-update-btn",
                         color="info",
                         className="mt-3 neon-danger-btn",

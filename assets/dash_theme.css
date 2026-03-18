@@ -176,8 +176,10 @@
   gap: 16px;
   background: rgba(8, 10, 15, 0.72);
   backdrop-filter: blur(2px);
-  color: transparent;
-  font-size: 0;
+  color: #f8fafc;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 #force-update-loading-target[data-dash-is-loading="true"]::before {
@@ -192,15 +194,10 @@
 }
 
 #force-update-loading-target[data-dash-is-loading="true"]::after {
-  content: "";
-  width: 96px;
-  height: 96px;
-  border-radius: 12px;
-  background-image: url("/static/images/fist.jpg");
-  background-size: cover;
-  background-position: center;
-  box-shadow: 0 0 24px rgba(239, 68, 68, 0.6);
-  animation: flash 1s ease-in-out infinite;
+  content: "Refreshing prices...";
+  color: #f8fafc;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 #force-update-alert {
@@ -210,11 +207,6 @@
   letter-spacing: 0.04em;
   background-color: #3b0b0b;
   color: #fca5a5;
-}
-
-@keyframes flash {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 1; }
 }
 
 @keyframes spin {

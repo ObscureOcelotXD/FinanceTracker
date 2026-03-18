@@ -161,6 +161,25 @@ If you are preparing a new production request, the repo now includes a narrow, P
 
 For this app, keep the Plaid request scoped to **`transactions`** and **`investments`** and describe the product as **read-only** unless you later add a real account/routing-number workflow that needs `auth`.
 
+### GitHub Pages site for Plaid review
+
+There is now a lightweight static site in **`docs/`** for public-facing product/legal pages:
+
+- **`docs/index.html`** – landing page
+- **`docs/privacy.html`** – privacy policy
+- **`docs/terms.html`** – terms of use
+- **`docs/support.html`** – support page
+
+To publish it with GitHub Pages:
+
+1. Push the repo to GitHub.
+2. In GitHub repo settings, open **Pages**.
+3. Set the source to **Deploy from a branch**.
+4. Choose your main branch and the **`/docs`** folder.
+5. Save, then wait for the Pages URL to be created.
+
+Before sharing the site externally, update the placeholder support contact text in **`docs/support.html`**.
+
 ## SEC Filings Summaries (Flow)
 
 When you click **Fetch & Summarize** in the SEC Filings page, the app:
