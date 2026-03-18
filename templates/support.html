@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>{{ public_app.app_name }} Support</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/darkly/bootstrap.min.css">
+  </head>
+  <body>
+    <div class="container py-4">
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+        <div>
+          <h1 class="h3 mb-1">Support</h1>
+          <p class="text-secondary mb-0">Operational and review information for {{ public_app.app_name }}.</p>
+        </div>
+        <a class="btn btn-outline-light btn-sm" href="/">Back to app</a>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">What the app does</h2>
+          <p class="mb-0">{{ public_app.app_name }} is a read-only personal finance dashboard that aggregates balances, transaction history, cash positions, crypto visibility where available, and investment holdings so users can review net worth, cash flow, and financial trends in one place.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">Plaid use case</h2>
+          <p class="mb-0">Track and manage your finances. Current requested Plaid scope is limited to read-only transactions and investments data for personal financial management workflows.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">What the app does not do</h2>
+          <p class="mb-0">{{ public_app.app_name }} does not support payments, transfers, ACH verification, buying, selling, trading, or any other movement of funds.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">Support contact</h2>
+          {% if public_app.support_email %}
+          <p class="mb-0"><a href="{{ public_app.support_mailto }}">{{ public_app.support_email }}</a></p>
+          {% else %}
+          <p class="mb-0">Set <code>PUBLIC_SUPPORT_EMAIL</code> in <code>.env</code> to publish your support address here.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">Public app URL</h2>
+          <p class="mb-0"><a href="{{ public_app.app_url }}">{{ public_app.app_url }}</a></p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary">
+        <div class="card-body">
+          <h2 class="h5">Review artifacts to capture</h2>
+          <ul class="mb-0">
+            <li>Home page showing the personal finance dashboard positioning.</li>
+            <li>Plaid Link launch button and connection flow.</li>
+            <li>Privacy Policy page.</li>
+            <li>Terms of Use page.</li>
+            <li>Support page with real support email configured.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

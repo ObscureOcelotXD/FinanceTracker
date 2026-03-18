@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>{{ public_app.app_name }} Terms of Use</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/darkly/bootstrap.min.css">
+  </head>
+  <body>
+    <div class="container py-4">
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+        <div>
+          <h1 class="h3 mb-1">Terms of Use</h1>
+          <p class="text-secondary mb-0">Basic terms for use of {{ public_app.app_name }} as a read-only personal finance dashboard and analytics tool.</p>
+        </div>
+        <a class="btn btn-outline-light btn-sm" href="/">Back to app</a>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">Permitted use</h2>
+          <p class="mb-0">{{ public_app.app_name }} is intended for read-only personal financial management, reporting, and decision-support use. It is designed to help users review balances, transaction history, cash positions, and investment holdings. You are responsible for the accuracy of the information you review and any financial decisions you make.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">No financial advice</h2>
+          <p class="mb-0">Analytics, summaries, and AI-generated insights are informational only and do not constitute financial, investment, tax, or legal advice.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">No money movement</h2>
+          <p class="mb-0">{{ public_app.app_name }} does not support payments, transfers, ACH verification, buying, selling, trading, or any other movement of funds.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">Third-party services</h2>
+          <p class="mb-0">{{ public_app.app_name }} may rely on Plaid and other third-party data providers. Availability, coverage, and data freshness may vary by institution and provider.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">Account disconnection</h2>
+          <p class="mb-0">Users may disconnect linked financial institutions, and locally stored data may be removed when an item is no longer needed.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary">
+        <div class="card-body">
+          <h2 class="h5">Contact</h2>
+          {% if public_app.support_email %}
+          <p class="mb-0">Questions about these terms can be sent to <a href="{{ public_app.support_mailto }}">{{ public_app.support_email }}</a>.</p>
+          {% else %}
+          <p class="mb-0">Set <code>PUBLIC_SUPPORT_EMAIL</code> in <code>.env</code> to publish a support contact here before sharing this page externally.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

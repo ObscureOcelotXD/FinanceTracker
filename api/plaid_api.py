@@ -19,6 +19,29 @@ import db_manager
 plaid_bp = Blueprint('plaid_api', __name__)
 #region Plaid API Configuration
 
+
+def _parse_csv_env(name, default_values):
+    raw_value = os.getenv(name, "")
+    values = [part.strip() for part in raw_value.split(",") if part.strip()]
+    return values or list(default_values)
+
+
+def _get_link_products():
+    # Default to the narrowest PFM scope this app uses today.
+    return [Products(name) for name in _parse_csv_env("PLAID_PRODUCTS", ["transactions", "investments"])]
+
+
+def _get_country_codes():
+    return [CountryCode(code.upper()) for code in _parse_csv_env("PLAID_COUNTRY_CODES", ["US"])]
+
+
+def _get_client_name():
+    return (
+        os.getenv("PLAID_CLIENT_NAME")
+        or os.getenv("PUBLIC_APP_NAME")
+        or "FinanceTracker"
+    ).strip()
+
 # Convert PLAID_ENV string to the correct Plaid Environment object
 PLAID_ENV = os.getenv("PLAID_ENV", "sandbox").strip().lower()  # Ensure no spaces
 
@@ -75,11 +98,14 @@ def create_link_token():
 
         request_kwargs = {
             "user": user,
-            "client_name": "Finance Tracker",
-            "products": [Products("auth"), Products("transactions"), Products("investments")],
-            "country_codes": [CountryCode("US")],
+            "client_name": _get_client_name(),
+            "products": _get_link_products(),
+            "country_codes": _get_country_codes(),
             "language": "en",
         }
+        link_customization = (os.getenv("PLAID_LINK_CUSTOMIZATION_NAME") or "").strip()
+        if link_customization:
+            request_kwargs["link_customization_name"] = link_customization
         redirect_uri = (os.getenv("PLAID_REDIRECT_URI") or "").strip()
         if redirect_uri:
             request_kwargs["redirect_uri"] = redirect_uri

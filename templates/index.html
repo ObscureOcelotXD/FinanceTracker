@@ -14,8 +14,43 @@
         <div class="container py-4">
           <div class="d-flex align-items-center justify-content-between mb-4">
             <div>
-              <h1 class="h3 mb-1">FinanceTracker</h1>
-              <p class="text-secondary mb-0">Dark finance dashboard</p>
+              <h1 class="h3 mb-1">{{ public_app.app_name }}</h1>
+              <p class="text-secondary mb-0">Read-only personal finance dashboard for balances, transaction history, holdings, cash positions, and decision-support insights.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <a class="btn btn-outline-light btn-sm" href="/privacy">
+                <i class="bi bi-shield-check me-1"></i>Privacy
+              </a>
+              <a class="btn btn-outline-light btn-sm" href="/terms">
+                <i class="bi bi-file-earmark-text me-1"></i>Terms
+              </a>
+              <a class="btn btn-outline-info btn-sm" href="/support">
+                <i class="bi bi-life-preserver me-1"></i>Support
+              </a>
+            </div>
+          </div>
+
+          <div class="neon-panel neon-slate mb-4">
+            <div class="neon-body">
+              <div class="row g-3 align-items-center">
+                <div class="col-12 col-lg-8">
+                  <h2 class="h5 mb-2">Plaid-ready personal financial management</h2>
+                  <p class="text-secondary mb-0">
+                    FinanceTracker helps users securely connect bank and investment accounts to view balances,
+                    transaction history, holdings, net worth, and cash-flow trends in one place. Current Plaid scope:
+                    <span class="text-light">transactions</span> and <span class="text-light">investments</span>.
+                  </p>
+                </div>
+                <div class="col-12 col-lg-4">
+                  <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
+                    <span class="badge text-bg-secondary">Use case: Track and manage your finances</span>
+                    <span class="badge text-bg-dark border">Read-only access</span>
+                    <span class="badge text-bg-dark border">No money movement</span>
+                    <span class="badge text-bg-dark border">No bank credential storage</span>
+                    <span class="badge text-bg-dark border">Local-first dashboards</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -356,6 +391,24 @@
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+          <div class="app-footer text-secondary small mt-4">
+            <div>
+              <strong class="text-light">Use case:</strong> Track and manage your finances.
+            </div>
+            <div>
+              <strong class="text-light">Support:</strong>
+              {% if public_app.support_email %}
+              <a href="{{ public_app.support_mailto }}" class="link-secondary">{{ public_app.support_email }}</a>
+              {% else %}
+              Set <code>PUBLIC_SUPPORT_EMAIL</code> in <code>.env</code> before sharing screenshots externally.
+              {% endif %}
+            </div>
+            <div class="d-flex gap-3 flex-wrap mt-1">
+              <a href="/privacy" class="link-secondary">Privacy Policy</a>
+              <a href="/terms" class="link-secondary">Terms of Use</a>
+              <a href="/support" class="link-secondary">Support</a>
             </div>
           </div>
         </div>

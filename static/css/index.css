@@ -33,6 +33,13 @@
                 0 0 18px rgba(59,130,246,0.25),
                 0 10px 30px rgba(0,0,0,0.45);
             }
+            .neon-panel.neon-slate {
+            background: linear-gradient(135deg, rgba(148,163,184,0.16), rgba(15,23,42,1));
+            border-color: rgba(148,163,184,0.28);
+            box-shadow:
+                0 0 14px rgba(148,163,184,0.18),
+                0 10px 30px rgba(0,0,0,0.45);
+            }
             .neon-panel.neon-gunmetal {
             background: linear-gradient(135deg, rgba(87,94,102,0.18), rgba(12,16,22,1));
             border-color: rgba(185,28,28,0.45);
@@ -176,4 +183,14 @@
             padding: 8px;
             line-height: 1;
             box-sizing: border-box;
+            }
+            .app-footer {
+            border-top: 1px solid #1f2937;
+            padding-top: 1rem;
+            }
+            .app-footer a {
+            text-decoration: none;
+            }
+            .app-footer a:hover {
+            text-decoration: underline;
             }

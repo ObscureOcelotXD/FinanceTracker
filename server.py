@@ -12,6 +12,28 @@ from api.quant_risk import compute_risk_summary
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+def _public_app_context():
+    app_name = (os.getenv("PUBLIC_APP_NAME") or "FinanceTracker").strip()
+    support_email = (
+        os.getenv("PUBLIC_SUPPORT_EMAIL")
+        or os.getenv("SEC_EDGAR_EMAIL")
+        or ""
+    ).strip()
+    app_url = (os.getenv("PUBLIC_APP_URL") or "http://127.0.0.1:5000").strip()
+    owner_name = (
+        os.getenv("PUBLIC_OWNER_NAME")
+        or os.getenv("SEC_EDGAR_COMPANY")
+        or app_name
+    ).strip()
+    return {
+        "app_name": app_name,
+        "support_email": support_email,
+        "app_url": app_url.rstrip("/"),
+        "owner_name": owner_name,
+        "support_mailto": f"mailto:{support_email}" if support_email else None,
+    }
+
+
 def create_flask_app():
     # Configure logging
     logging.basicConfig(level=logging.DEBUG)
@@ -24,19 +46,37 @@ def create_flask_app():
 
     @app.route('/')
     def index():
-        resp = make_response(render_template('index.html'))
+        resp = make_response(render_template('index.html', public_app=_public_app_context()))
         resp.headers["Cache-Control"] = "no-store"
         return resp
 
     @app.route('/quant')
     def quant():
-        resp = make_response(render_template('quant.html'))
+        resp = make_response(render_template('quant.html', public_app=_public_app_context()))
         resp.headers["Cache-Control"] = "no-store"
         return resp
 
     @app.route('/filings')
     def filings():
-        resp = make_response(render_template('filings.html'))
+        resp = make_response(render_template('filings.html', public_app=_public_app_context()))
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.route('/privacy')
+    def privacy():
+        resp = make_response(render_template('privacy.html', public_app=_public_app_context()))
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.route('/terms')
+    def terms():
+        resp = make_response(render_template('terms.html', public_app=_public_app_context()))
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.route('/support')
+    def support():
+        resp = make_response(render_template('support.html', public_app=_public_app_context()))
         resp.headers["Cache-Control"] = "no-store"
         return resp
 

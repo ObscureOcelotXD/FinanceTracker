@@ -114,6 +114,12 @@ verification later:
 
 To use **live** bank and brokerage data (after Plaid has approved your app):
 
+This app’s Plaid use case is **read-only personal financial management**:
+
+- View balances, transaction history, investment holdings, cash positions, and related analytics
+- No payments, transfers, ACH verification, trading, buying, selling, or movement of funds
+- Keep the requested Plaid scope to **`transactions`** and **`investments`** unless the product later adds a real funding workflow
+
 1. **Copy env and set production credentials**
    - Copy `.env.example` to `.env` if you haven’t already.
    - In `.env`, set:
@@ -127,10 +133,33 @@ To use **live** bank and brokerage data (after Plaid has approved your app):
 
 3. **Run the app and connect**
    - Start the app (e.g. `python main.py`), open the home page, and click **Connect Plaid**.
-   - Link will use production; connect your real accounts. After linking, the app pulls accounts, recent transactions, and investment holdings into the local DB for dashboards and AI insights.
+   - Link will use production; connect your real accounts. After linking, the app pulls read-only account, transaction, and investment holdings data into the local DB for dashboards and analytics.
 
 4. **Optional**
    - Leave `PLAID_WEBHOOK` unset or set it to `http://127.0.0.1:5000/webhook` if you want to receive product/status webhooks (optional for local use).
+
+### Fix: INVALID_LINK_CUSTOMIZATION / Data Transparency Messaging
+
+If Link shows **INVALID_LINK_CUSTOMIZATION** and *"At least one Data Transparency Messaging use case is required"*, Plaid requires you to configure **Data Transparency Messaging (DTM)** in the dashboard (required for US/Canada as of 2024):
+
+1. Go to [Plaid Dashboard → Link → Data Transparency](https://dashboard.plaid.com/link/data-transparency-v5) (or Link Customization).
+2. Open the **Data Transparency** section and **select at least one use case** (e.g. "Track and manage your finances", "Invest your money").
+3. Click **Publish**. Link will then work; no code change required. If you created a **named** customization and want to use it, set `PLAID_LINK_CUSTOMIZATION_NAME=<name>` in `.env`.
+
+### OAuth vs credential-based connections
+
+- **OAuth:** Many US institutions (including **SoFi, Coinbase**, and other large banks) use OAuth. You must set `PLAID_REDIRECT_URI` and add that URI in Plaid Dashboard → Keys → Redirect URIs. The app’s `/oauth/callback` route sends users back after they sign in at the institution.
+- **Without OAuth:** Some smaller banks and credit unions still use username/password (credential-based) in Link; those work without a redirect URI. Which institutions use OAuth is listed in [Plaid Dashboard → Compliance → US OAuth institutions](https://dashboard.plaid.com/settings/compliance/us-oauth-institutions) (or the Plaid docs). You need OAuth configured to connect to SoFi, Coinbase, and most major US banks.
+
+### Plaid production approval kit
+
+If you are preparing a new production request, the repo now includes a narrow, PFM-focused submission package:
+
+- **`docs/PLAID_PRODUCTION_REQUEST.md`** – exact wording for the production request form
+- **`docs/PLAID_PRODUCTION_CHECKLIST.md`** – app profile, DTM, screenshots, and security questionnaire prep
+- **`/privacy`**, **`/terms`**, **`/support`** – approval-facing pages you can show Plaid reviewers
+
+For this app, keep the Plaid request scoped to **`transactions`** and **`investments`** and describe the product as **read-only** unless you later add a real account/routing-number workflow that needs `auth`.
 
 ## SEC Filings Summaries (Flow)
 

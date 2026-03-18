@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>{{ public_app.app_name }} Privacy Policy</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/darkly/bootstrap.min.css">
+  </head>
+  <body>
+    <div class="container py-4">
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+        <div>
+          <h1 class="h3 mb-1">Privacy Policy</h1>
+          <p class="text-secondary mb-0">{{ public_app.app_name }} uses connected financial data only to provide read-only personal finance dashboards and analytics requested by the user.</p>
+        </div>
+        <a class="btn btn-outline-light btn-sm" href="/">Back to app</a>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">Data we collect</h2>
+          <p class="mb-0">When you connect an account through Plaid, {{ public_app.app_name }} may receive read-only account, balance, transaction history, and investment holdings data needed to power dashboards, analytics, and holdings views.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">How data is used</h2>
+          <p class="mb-0">Data is used to aggregate financial accounts, display balances and holdings, analyze spending and cash flow, and generate decision-support insights. The app does not use Plaid for payments, transfers, ACH verification, trading, or movement of funds. Data is not sold or rented to advertisers or data brokers.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">Credentials and tokens</h2>
+          <p class="mb-0">Bank credentials are handled by Plaid Link and are not stored by {{ public_app.app_name }}. Plaid access tokens are stored server-side and are not exposed client-side.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">Retention and deletion</h2>
+          <p class="mb-0">Users may disconnect linked institutions. Linked items and locally stored financial data can be removed when no longer needed or on request.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary">
+        <div class="card-body">
+          <h2 class="h5">Contact</h2>
+          {% if public_app.support_email %}
+          <p class="mb-0">Questions about this policy can be sent to <a href="{{ public_app.support_mailto }}">{{ public_app.support_email }}</a>.</p>
+          {% else %}
+          <p class="mb-0">Set <code>PUBLIC_SUPPORT_EMAIL</code> in <code>.env</code> to publish a support contact here before sharing this page externally.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
