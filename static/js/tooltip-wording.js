@@ -75,7 +75,9 @@ document.addEventListener("DOMContentLoaded", () => {
           quantDiversificationTipBody.innerText = "Portfolio volatility / weighted avg single-stock volatility. Value: —";
           quantUpdatedEl.innerText = "Last updated: —";
           quantUpdatedEl.className = "badge bg-secondary-subtle text-secondary-emphasis";
-          console.error("Quant risk summary error:", data.error);
+          if (typeof reportClientError === "function") {
+            reportClientError("quant_risk", data.error || "risk_summary error");
+          }
           return;
         }
         const volText = data.volatility_pct !== null ? `${data.volatility_pct}%` : "—";
@@ -192,7 +194,9 @@ document.addEventListener("DOMContentLoaded", () => {
         quantDiversificationEl.innerText = "—";
         quantUpdatedEl.innerText = "Last updated: —";
         quantUpdatedEl.className = "badge bg-secondary-subtle text-secondary-emphasis";
-        console.error("Quant risk fetch error:", error);
+        if (typeof reportClientError === "function") {
+          reportClientError("quant_risk", "fetch failed", error && error.message);
+        }
       });
   }
 });

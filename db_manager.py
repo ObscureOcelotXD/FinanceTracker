@@ -1,5 +1,6 @@
+import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import pandas as pd
 import re
@@ -248,10 +249,101 @@ def init_db():
         ON sec_filing_summaries (doc_hash)
     """)
 
+    cur14 = con.cursor()
+    cur14.execute("""
+        CREATE TABLE IF NOT EXISTS client_error_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            origin TEXT NOT NULL DEFAULT 'client',
+            source TEXT NOT NULL,
+            message TEXT NOT NULL,
+            detail TEXT
+        )
+    """)
+    cur14.execute("PRAGMA table_info(client_error_log)")
+    _cel_cols = [row[1] for row in cur14.fetchall()]
+    if _cel_cols and "origin" not in _cel_cols:
+        cur14.execute(
+            "ALTER TABLE client_error_log ADD COLUMN origin TEXT DEFAULT 'client'"
+        )
+        cur14.execute(
+            "UPDATE client_error_log SET origin = 'client' WHERE origin IS NULL"
+        )
+    cur14.execute("""
+        CREATE INDEX IF NOT EXISTS idx_client_error_log_created_at
+        ON client_error_log (created_at)
+    """)
+
     con.commit()
     con.close()
+    prune_error_logs()
 
 # endregion
+
+
+def insert_app_error(
+    origin: str,
+    source: str,
+    message: str,
+    detail: Optional[str] = None,
+) -> None:
+    """Append an app error row (client or server). See ENABLE_*_ERROR_LOG in server."""
+    orig = (origin or "app")[:32]
+    src = (source or "app")[:120]
+    msg = (message or "")[:2000]
+    det = None
+    if detail is not None:
+        det = str(detail)[:4000]
+    created = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    con = get_connection()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            """
+            INSERT INTO client_error_log (created_at, origin, source, message, detail)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (created, orig, src, msg, det),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def insert_client_error(source: str, message: str, detail: Optional[str] = None) -> None:
+    """Append a client-reported error (origin=client)."""
+    insert_app_error("client", source, message, detail)
+
+
+def prune_error_logs(retention_days: Optional[int] = None) -> int:
+    """
+    Delete error log rows older than retention (default ERROR_LOG_RETENTION_DAYS or 30).
+    Set retention_days to 0 to skip pruning. Returns number of rows deleted.
+    """
+    if retention_days is None:
+        raw = (os.getenv("ERROR_LOG_RETENTION_DAYS") or "30").strip()
+        try:
+            days = int(raw)
+        except ValueError:
+            days = 30
+    else:
+        days = retention_days
+    if days <= 0:
+        return 0
+    cutoff_dt = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = cutoff_dt.strftime("%Y-%m-%d %H:%M:%S")
+    con = get_connection()
+    try:
+        cur = con.cursor()
+        cur.execute("DELETE FROM client_error_log WHERE created_at < ?", (cutoff,))
+        deleted = cur.rowcount if cur.rowcount is not None else 0
+        con.commit()
+        return int(deleted)
+    except sqlite3.OperationalError:
+        # Table may not exist yet on first migration path
+        return 0
+    finally:
+        con.close()
 
 
 # region UI and API Crud Operations
@@ -322,7 +414,7 @@ def delete_record(row_id):
 
 def insert_items(item_id, access_token):
      # Insert into items table (your existing functionality)
-    conn = sqlite3.connect("finance_data.db")
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS items (
@@ -347,7 +439,7 @@ def insert_items(item_id, access_token):
 
 
 def update_item_institution(item_id, institution_name=None, institution_id=None):
-    conn = sqlite3.connect("finance_data.db")
+    conn = get_connection()
     c = conn.cursor()
     c.execute("PRAGMA table_info(items)")
     item_columns = [row[1] for row in c.fetchall()]
@@ -368,7 +460,7 @@ def update_item_institution(item_id, institution_name=None, institution_id=None)
 
 
 def get_items():
-    conn = sqlite3.connect("finance_data.db")
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS items (
@@ -382,7 +474,7 @@ def get_items():
     return [{"item_id": row[0], "access_token": row[1]} for row in rows]
 
 def store_accounts(accounts, item_id=None):
-    conn = sqlite3.connect("finance_data.db")
+    conn = get_connection()
     c = conn.cursor()
     c.execute("PRAGMA table_info(accounts)")
     account_columns = [row[1] for row in c.fetchall()]
@@ -407,7 +499,7 @@ def store_accounts(accounts, item_id=None):
 
 
 def get_institutions():
-    conn = sqlite3.connect("finance_data.db")
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS items (
@@ -510,12 +602,13 @@ def wipe_all_data(force: bool = False):
     _safe_delete("etf_sector_breakdown")
     _safe_delete("etf_sources")
     _safe_delete("sec_filing_summaries")
+    _safe_delete("client_error_log")
     conn.commit()
     conn.close()
 
 def insert_transactions(transactions):
     # Connect to SQLite and insert each transaction
-    conn = sqlite3.connect("finance_data.db")
+    conn = get_connection()
     c = conn.cursor()
     for txn in transactions:
         # Concatenate categories if present

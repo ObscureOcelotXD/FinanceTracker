@@ -4,7 +4,6 @@ from dash import html, dcc, Input, Output, State, get_app
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import pandas as pd
-import datetime as dt
 import db_manager
 from api import finnhub_api
 
@@ -201,9 +200,9 @@ def force_update_table(n_clicks, current_counter):
             sector_map = finnhub_api.get_sector_allocation_map(tickers, force_refresh=True)
             print(f"[Sector] Force refresh complete. Count={len(sector_map)}")
         # Just increment the counter → this will trigger your existing load_stocks_table callback
-        return (current_counter or 0) + 1, "Prices updated.", True, "success", "Refresh Prices", False, False, dt.datetime.now(dt.timezone.utc).isoformat()
+        return (current_counter or 0) + 1, "Prices updated.", True, "success", "Refresh Prices", False, False, ""
     except Exception as exc:
-        return dash.no_update, f"Update failed: {exc}", True, "danger", "Refresh Prices", False, False, dt.datetime.now(dt.timezone.utc).isoformat()
+        return dash.no_update, f"Update failed: {exc}", True, "danger", "Refresh Prices", False, False, ""
     
     
 # Page layout

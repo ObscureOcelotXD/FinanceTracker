@@ -42,6 +42,18 @@ def _get_client_name():
         or "FinanceTracker"
     ).strip()
 
+
+def _is_nonfatal_investments_skip(exc):
+    text = str(exc)
+    return (
+        "ADDITIONAL_CONSENT_REQUIRED" in text
+        and "PRODUCT_INVESTMENTS" in text
+    )
+
+
+def _investments_skip_message():
+    return "Skipped investment holdings import because this item does not have investment consent or investment accounts."
+
 # Convert PLAID_ENV string to the correct Plaid Environment object
 PLAID_ENV = os.getenv("PLAID_ENV", "sandbox").strip().lower()  # Ensure no spaces
 
@@ -146,6 +158,8 @@ def exchange_public_token():
             db_manager.update_item_institution(item_id, institution_name, institution_id)
 
         errors = []
+        messages = []
+        holdings_status = "imported"
         store_accounts(client, access_token, item_id=item_id)
         try:
             store_transactions(client, access_token)
@@ -154,9 +168,16 @@ def exchange_public_token():
         try:
             store_investment_holdings(client, access_token)
         except Exception as exc:
-            errors.append(f"holdings: {exc}")
+            if _is_nonfatal_investments_skip(exc):
+                holdings_status = "skipped"
+                messages.append(_investments_skip_message())
+            else:
+                holdings_status = "error"
+                errors.append(f"holdings: {exc}")
 
-        payload = {"item_id": item_id, "status": "linked"}
+        payload = {"item_id": item_id, "status": "linked", "holdings_status": holdings_status}
+        if messages:
+            payload["messages"] = messages
         if errors:
             payload["warnings"] = errors
         return jsonify(payload)
@@ -221,14 +242,25 @@ def import_holdings():
         if not items:
             return jsonify({"error": "No linked Plaid items found."}), 400
         total_imported = 0
+        total_skipped = 0
         errors = []
+        messages = []
         for item in items:
             try:
                 store_investment_holdings(client, item["access_token"])
                 total_imported += 1
             except Exception as exc:
-                errors.append(str(exc))
-        payload = {"status": "ok", "items_processed": total_imported}
+                if _is_nonfatal_investments_skip(exc):
+                    total_skipped += 1
+                else:
+                    errors.append(str(exc))
+        if total_skipped:
+            messages.append(
+                f"Skipped holdings import for {total_skipped} item(s) because investment consent or investment accounts were not available."
+            )
+        payload = {"status": "ok", "items_processed": total_imported, "items_skipped": total_skipped}
+        if messages:
+            payload["messages"] = messages
         if errors:
             payload["warnings"] = errors
         return jsonify(payload)

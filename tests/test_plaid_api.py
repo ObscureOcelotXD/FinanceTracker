@@ -121,6 +121,38 @@ def test_exchange_public_token_returns_warnings_for_partial_failures(client, mon
     assert captured["accounts"] == ("access-123", "item-123")
 
 
+def test_exchange_public_token_skips_nonfatal_investments_consent_errors(client, monkeypatch):
+    import api.plaid_api as plaid_module
+
+    monkeypatch.setattr(
+        plaid_module.client,
+        "item_public_token_exchange",
+        lambda _request: SimpleNamespace(access_token="access-123", item_id="item-123"),
+    )
+    monkeypatch.setattr(plaid_module.db_manager, "insert_items", lambda *args, **kwargs: None)
+    monkeypatch.setattr(plaid_module.db_manager, "update_item_institution", lambda *args, **kwargs: None)
+    monkeypatch.setattr(plaid_module, "store_accounts", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(plaid_module, "store_transactions", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        plaid_module,
+        "store_investment_holdings",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("ADDITIONAL_CONSENT_REQUIRED: client does not have user consent to access the PRODUCT_INVESTMENTS product")
+        ),
+    )
+
+    response = client.post("/exchange_public_token", json={"public_token": "public-123"})
+
+    payload = response.get_json()
+    assert response.status_code == 200
+    assert payload["status"] == "linked"
+    assert payload["holdings_status"] == "skipped"
+    assert "warnings" not in payload
+    assert payload["messages"] == [
+        "Skipped investment holdings import because this item does not have investment consent or investment accounts."
+    ]
+
+
 def test_import_holdings_requires_linked_items(client, monkeypatch):
     import api.plaid_api as plaid_module
 
@@ -130,6 +162,35 @@ def test_import_holdings_requires_linked_items(client, monkeypatch):
 
     assert response.status_code == 400
     assert response.get_json()["error"] == "No linked Plaid items found."
+
+
+def test_import_holdings_skips_nonfatal_investments_consent_errors(client, monkeypatch):
+    import api.plaid_api as plaid_module
+
+    monkeypatch.setattr(
+        plaid_module.db_manager,
+        "get_items",
+        lambda: [{"item_id": "item-1", "access_token": "token-1"}],
+    )
+    monkeypatch.setattr(
+        plaid_module,
+        "store_investment_holdings",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("ADDITIONAL_CONSENT_REQUIRED: client does not have user consent to access the PRODUCT_INVESTMENTS product")
+        ),
+    )
+
+    response = client.post("/plaid/import_holdings")
+
+    payload = response.get_json()
+    assert response.status_code == 200
+    assert payload["status"] == "ok"
+    assert payload["items_processed"] == 0
+    assert payload["items_skipped"] == 1
+    assert "warnings" not in payload
+    assert payload["messages"] == [
+        "Skipped holdings import for 1 item(s) because investment consent or investment accounts were not available."
+    ]
 
 
 def test_import_transactions_collects_warnings(client, monkeypatch):

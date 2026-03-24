@@ -7,11 +7,12 @@ Use this checklist to finish the non-code parts of Plaid production approval.
 Complete the Plaid app/company profile with information that matches the app and repository:
 
 - App name: `FinanceTracker`
-- App URL: your public landing page or deployed URL
-- Support email: use the same email shown on `/support`
+- App URL: your GitHub Pages landing page or other public landing page
+- Support email: use the same email shown on the public support page
 - Product description: use the wording in `docs/PLAID_PRODUCTION_REQUEST.md`
 - Branding: add a logo if you have one
 - Product framing: read-only personal finance dashboard, not payments or trading
+- Current usage framing: personal use first, my own connected accounts while the app is in active development
 
 Before taking screenshots, set these values in `.env`:
 
@@ -20,12 +21,14 @@ Before taking screenshots, set these values in `.env`:
 - `PUBLIC_SUPPORT_EMAIL`
 - `PUBLIC_OWNER_NAME`
 
-Then capture:
+Then capture from the running app:
 
 1. `/`
 2. `/privacy`
 3. `/terms`
 4. `/support`
+
+Also publish the static public site from `docs/` with GitHub Pages and use that URL in the Plaid profile/request.
 
 ## 2. Link Customization / Data Transparency Messaging
 
@@ -46,6 +49,7 @@ Keep the request narrow and consistent across the form, screenshots, and app con
 - Do not request `auth` unless you add a real account/routing-number workflow
 - Make the read-only model explicit: balances, transaction history, and holdings only
 - State clearly that the app does not support payments, transfers, ACH verification, or trading
+- State clearly that current production access is needed for my own connected accounts first, not a broad onboarding rollout
 
 The app now reads `PLAID_PRODUCTS` and `PLAID_COUNTRY_CODES` from the environment so your approval request and runtime config can stay aligned.
 
@@ -63,6 +67,7 @@ Suggested answer themes:
 - Users can disconnect accounts and linked items can be removed when no longer needed.
 - The product uses financial data only for user-requested personal finance features and does not sell or rent user data.
 - The product is read-only and is not used for money movement, payment initiation, account funding, or execution of trades.
+- The current production request is for my own connected accounts while the product is being built and validated with real data.
 
 ## 5. Submission Package
 
@@ -71,9 +76,10 @@ When you submit the request, include or be ready with:
 - Exact app description from `docs/PLAID_PRODUCTION_REQUEST.md`
 - Product list: `transactions`, `investments`
 - DTM use case: `Track and manage your finances`
-- Support email and public URL
+- Support email and public GitHub Pages URL
 - Screenshots of the approval-facing routes
 - A clear note that the app is read-only and does not buy, sell, trade, transfer, or move funds
+- A clear note that current production access is for my own accounts first while the app remains in active development
 
 ## 6. If Plaid Still Limits Access
 

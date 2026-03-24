@@ -70,7 +70,7 @@
                   </div>
                   <div class="d-flex align-items-center gap-3 mb-3 bull-bear-actions">
                     <img src="{{ url_for('static', filename='images/bull-bear.gif') }}" alt="Bull and bear" class="bull-bear-gif">
-                    <button class="btn btn-success bull-bear-btn" onclick="window.location.href='/dashboard/stocks_dash/'">
+                    <button type="button" id="bullBearStocksBtn" class="btn btn-success bull-bear-btn">
                       <i class="bi bi-bar-chart-line me-2"></i>View Stocks
                     </button>
                   </div>
@@ -80,6 +80,7 @@
                     </button>
                     <small class="text-secondary">Private, local-only import.</small>
                   </div>
+                  <div id="plaidLinkStatus" class="text-secondary small"></div>
                   <div>
                     <a class="btn btn-outline-info btn-sm" href="/filings">
                       <i class="bi bi-file-earmark-text me-1"></i>SEC Filings Info
@@ -453,12 +454,21 @@
           }
         })
         .catch(err => {
-          console.error('Wipe failed:', err);
-          alert('Wipe failed. Check console.');
+          if (typeof reportClientError === 'function') {
+            reportClientError('admin_wipe', 'Network or server error', err && err.message);
+          }
+          alert('Wipe failed. Please try again.');
         });
     });
   }
+  const bullBearStocksBtn = document.getElementById('bullBearStocksBtn');
+  if (bullBearStocksBtn) {
+    bullBearStocksBtn.addEventListener('click', () => {
+      window.location.href = '/dashboard/stocks_dash/';
+    });
+  }
 </script>
+<script src="{{ url_for('static', filename='js/client-error.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tooltip-wording.js') }}"></script>
 
 <script>
@@ -547,15 +557,19 @@
 
     // Initialize Plaid Link (kept for later use)
     const linkButton = document.getElementById('linkButton');
+    const plaidLinkStatus = document.getElementById('plaidLinkStatus');
     if (linkButton) {
         linkButton.onclick = function() {
+            if (plaidLinkStatus) {
+                plaidLinkStatus.innerText = 'Starting Plaid Link...';
+            }
             fetch('/create_link_token', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
-                    console.log("📢 Response from Flask:", data); // Debugging
-
                     if (!data.link_token) {
-                        console.error("🚨 Error: No link token received!", data);
+                        if (plaidLinkStatus) {
+                            plaidLinkStatus.innerText = data.error || 'Unable to create Plaid Link token.';
+                        }
                         return;
                     }
 
@@ -574,26 +588,51 @@
                             })
                             .then(response => response.json())
                             .then(exchangeData => {
-                                console.log("Exchange response:", exchangeData);
-                                return fetch('/plaid/import_holdings', { method: 'POST' });
-                            })
-                            .then(response => response.json())
-                            .then(importData => {
-                                console.log("Holdings import:", importData);
+                                if (exchangeData.error) {
+                                    if (plaidLinkStatus) {
+                                        plaidLinkStatus.innerText = `Link failed: ${exchangeData.error}`;
+                                    }
+                                    return;
+                                }
+                                const messages = exchangeData.messages || [];
+                                if (plaidLinkStatus) {
+                                    if (messages.length) {
+                                        plaidLinkStatus.innerText = `Linked successfully. ${messages.join(' ')}`;
+                                    } else {
+                                        plaidLinkStatus.innerText = 'Linked successfully.';
+                                    }
+                                }
                             })
                             .catch(error => {
-                                console.error("Error exchanging token:", error);
+                                if (typeof reportClientError === 'function') {
+                                    reportClientError('plaid_exchange', 'Token exchange failed', error && error.message);
+                                }
+                                if (plaidLinkStatus) {
+                                    plaidLinkStatus.innerText = 'Link failed. Please try again.';
+                                }
                             });
                         },
                         onExit: function(err, metadata) {
-                        if (err) console.error("Plaid Link Error:", err);
+                        if (err) {
+                            if (typeof reportClientError === 'function') {
+                                reportClientError('plaid_link_exit', err.error_message || err.display_message || 'exit', err && err.error_code);
+                            }
+                            if (plaidLinkStatus) {
+                                plaidLinkStatus.innerText = err.display_message || err.error_message || 'Plaid Link exited with an error.';
+                            }
+                        }
                         }
                     });
 
                     handler.open();
                 })
                 .catch(error => {
-                    console.error("🚨 Fetch Error:", error);
+                    if (typeof reportClientError === 'function') {
+                        reportClientError('plaid_link_token', 'create_link_token fetch failed', error && error.message);
+                    }
+                    if (plaidLinkStatus) {
+                        plaidLinkStatus.innerText = 'Unable to start Plaid Link.';
+                    }
                 });
         };
     }
@@ -614,7 +653,9 @@
             }
         })
         .catch(error => {
-            console.error("Error:", error);
+            if (typeof reportClientError === 'function') {
+                reportClientError('home_sp500', 'fetch failed', error && error.message);
+            }
             sp500El.innerText = "Error fetching data";
         });
 
@@ -628,7 +669,9 @@
             }
         })
         .catch(error => {
-            console.error("Error:", error);
+            if (typeof reportClientError === 'function') {
+                reportClientError('home_btc', 'fetch failed', error && error.message);
+            }
             btcEl.innerText = "Error fetching data";
         });
     }
@@ -652,11 +695,15 @@
                 document.getElementById("tickerPrice").innerText = data.price;
             } else {
                 document.getElementById("tickerPrice").innerText = "Error fetching price";
-                console.error("Error:", data.error);
+                if (typeof reportClientError === 'function') {
+                    reportClientError('ticker_price', data.error || 'no price');
+                }
             }
             })
             .catch(error => {
-            console.error("Fetch error:", error);
+            if (typeof reportClientError === 'function') {
+                reportClientError('ticker_price', 'fetch failed', error && error.message);
+            }
             document.getElementById("tickerPrice").innerText = "Error fetching price";
             });
         });
@@ -684,7 +731,9 @@
             }
             })
             .catch(error => {
-            console.error("Crypto fetch error:", error);
+            if (typeof reportClientError === 'function') {
+                reportClientError('crypto_price', 'fetch failed', error && error.message);
+            }
             document.getElementById("cryptoPrice").innerText = "Error fetching price";
             });
         });
@@ -705,7 +754,9 @@
             }
         })
         .catch(error => {
-            console.error("Finnhub fetch error:", error);
+            if (typeof reportClientError === 'function') {
+                reportClientError('finnhub_widget', 'fetch failed', error && error.message);
+            }
             finnhubValue.innerText = "Error fetching data";
         });
     }
@@ -732,7 +783,9 @@
             }
         })
         .catch(error => {
-            console.error("Stock fetch error:", error);
+            if (typeof reportClientError === 'function') {
+                reportClientError('finnhub_stock', 'fetch failed', error && error.message);
+            }
             document.getElementById("finnTickerPrice").innerText = "Error fetching data";
         });
         });
@@ -749,13 +802,20 @@ if (geckoBtcValue) {
     .then(response => response.json())
     .then(data => {
         if (data.price) {
-            console.log("BTC Price:", data.price);
             geckoBtcValue.innerText = data.price;
         } else {
-            console.error("Error:", data.error);
+            geckoBtcValue.innerText = "Error fetching data";
+            if (typeof reportClientError === 'function') {
+                reportClientError('coingecko_btc', data.error || 'no price');
+            }
         }
     })
-    .catch(error => console.error("Fetch error:", error));
+    .catch(error => {
+        geckoBtcValue.innerText = "Error fetching data";
+        if (typeof reportClientError === 'function') {
+            reportClientError('coingecko_btc', 'fetch failed', error && error.message);
+        }
+    });
 }
 
 const geckoBtn = document.getElementById("geckoFetchCryptoBtn");
@@ -777,57 +837,19 @@ if (geckoBtn) {
             document.getElementById("geckoCryptoPrice").innerText = data.price;
         } else {
             document.getElementById("geckoCryptoPrice").innerText = "Error fetching data";
-            console.error("Crypto fetch error:", data.error);
+            if (typeof reportClientError === 'function') {
+                reportClientError('coingecko_crypto', data.error || 'no price');
+            }
         }
         })
         .catch(error => {
-        console.error("Crypto fetch error:", error);
+        if (typeof reportClientError === 'function') {
+            reportClientError('coingecko_crypto', 'fetch failed', error && error.message);
+        }
         document.getElementById("geckoCryptoPrice").innerText = "Error fetching data";
         });
     });
 }
-
-
-
-    // fetch('/binanceBtc')
-    //     .then(response => response.json())
-    //     .then(data => {
-    //         if (data.btc) {
-    //         document.getElementById('binance-btc-value').innerText = data.btc;
-    //         } else {
-    //         document.getElementById('binance-btc-value').innerText = "Error fetching data";
-    //         }
-    //     })
-    //     .catch(error => {
-    //         console.error("Error:", error);
-    //         document.getElementById('binance-btc-value').innerText = "Error fetching data";
-    //     });
-
-    // // Crypto price fetch
-    // document.getElementById("binanceFetchCryptoBtn").addEventListener("click", function() {
-    //   const ticker = document.getElementById("binanceCryptoInput").value.trim();
-    //   if (!ticker) {
-    //     alert("Please enter a crypto ticker symbol.");
-    //     return;
-    //   }
-    //   fetch('/binanceCrypto', {
-    //     method: "POST",
-    //     headers: { "Content-Type": "application/json" },
-    //     body: JSON.stringify({ ticker: ticker })
-    //   })
-    //   .then(response => response.json())
-    //   .then(data => {
-    //     if (data.price) {
-    //       document.getElementById("binanceCryptoPrice").innerText = data.price;
-    //     } else {
-    //       document.getElementById("binanceCryptoPrice").innerText = "Error fetching data";
-    //     }
-    //   })
-    //   .catch(error => {
-    //     console.error("Crypto fetch error:", error);
-    //     document.getElementById("binanceCryptoPrice").innerText = "Error fetching data";
-    //   });
-    // });
   </script>
 
   <script>
@@ -839,11 +861,15 @@ if (geckoBtn) {
         document.getElementById('blockcount').innerText = data.block_count;
       } else {
         document.getElementById('blockcount').innerText = "Error fetching data";
-        console.error("Error fetching Umbrel metrics:", data.error);
+        if (typeof reportClientError === 'function') {
+          reportClientError('umbrel_blockcount', data.error || 'no block_count');
+        }
       }
     })
     .catch(error => {
-      console.error("Error fetching Umbrel metrics:", error);
+      if (typeof reportClientError === 'function') {
+        reportClientError('umbrel_blockcount', 'fetch failed', error && error.message);
+      }
       document.getElementById('blockcount').innerText = "Error fetching data";
     });
 
@@ -854,7 +880,9 @@ if (geckoBtn) {
         document.getElementById('networkhashps').innerText = data.networkhashps || "Error";
       })
       .catch(error => {
-        console.error(error);
+        if (typeof reportClientError === 'function') {
+          reportClientError('umbrel_networkhashps', 'fetch failed', error && error.message);
+        }
         document.getElementById('networkhashps').innerText = "Error";
       });
 
@@ -869,7 +897,9 @@ if (geckoBtn) {
         }
       })
       .catch(error => {
-        console.error(error);
+        if (typeof reportClientError === 'function') {
+          reportClientError('umbrel_mempoolinfo', 'fetch failed', error && error.message);
+        }
         document.getElementById('mempoolinfo').innerText = "Error";
       });
 
@@ -884,7 +914,9 @@ if (geckoBtn) {
         }
       })
       .catch(error => {
-        console.error(error);
+        if (typeof reportClientError === 'function') {
+          reportClientError('umbrel_estimatesmartfee', 'fetch failed', error && error.message);
+        }
         document.getElementById('estimatesmartfee').innerText = "Error";
       });
 
@@ -897,7 +929,9 @@ if (geckoBtn) {
               document.getElementById('lightningAlias').innerText = "Error";
               document.getElementById('lightningBlockHeight').innerText = "Error";
               document.getElementById('lightningChannels').innerText = "Error";
-              console.error("Error fetching Lightning metrics:", data.error);
+              if (typeof reportClientError === 'function') {
+                  reportClientError('umbrel_lightning', data.error || 'getinfo error');
+              }
           } else {
               // For LND getinfo, common fields include 'alias', 'block_height', and sometimes 'num_active_channels'
               document.getElementById('lightningAlias').innerText = data.alias || "N/A";
@@ -906,7 +940,9 @@ if (geckoBtn) {
           }
       })
       .catch(error => {
-          console.error("Error fetching Lightning metrics:", error);
+          if (typeof reportClientError === 'function') {
+              reportClientError('umbrel_lightning', 'fetch failed', error && error.message);
+          }
           document.getElementById('lightningAlias').innerText = "Error";
           document.getElementById('lightningBlockHeight').innerText = "Error";
           document.getElementById('lightningChannels').innerText = "Error";
@@ -923,7 +959,9 @@ if (geckoBtn) {
           document.getElementById('coldBtcBalance').innerText = "—";
           document.getElementById('coldBtcConfirmed').innerText = "—";
           document.getElementById('coldBtcUnconfirmed').innerText = "—";
-          console.error("Cold storage error:", data.error);
+          if (typeof reportClientError === 'function') {
+            reportClientError('btc_wallet_summary', data.error || 'error');
+          }
           return;
         }
         if (data.enabled === false) {
@@ -945,25 +983,11 @@ if (geckoBtn) {
         document.getElementById('coldBtcBalance').innerText = "—";
         document.getElementById('coldBtcConfirmed').innerText = "—";
         document.getElementById('coldBtcUnconfirmed').innerText = "—";
-        console.error("Cold storage fetch error:", error);
+        if (typeof reportClientError === 'function') {
+          reportClientError('btc_wallet_summary', 'fetch failed', error && error.message);
+        }
       });
   </script>
 
   <script src="{{ url_for('static', filename='js/privacy-mode.js') }}"></script>
-  <script>
-    // fetch('/nownodes/eth_blocknumber')
-    //   .then(response => response.json())
-    //   .then(data => {
-    //       if (data.block_number !== undefined) {
-    //           document.getElementById('ethBlockNumber').innerText = data.block_number;
-    //       } else {
-    //           document.getElementById('ethBlockNumber').innerText = "Error fetching data";
-    //           console.error("Error fetching NOWNODES metrics:", data.error);
-    //       }
-    //   })
-    //   .catch(error => {
-    //       console.error("Error fetching NOWNODES metrics:", error);
-    //       document.getElementById('ethBlockNumber').innerText = "Error fetching data";
-    //   });
-  </script>
 </html>

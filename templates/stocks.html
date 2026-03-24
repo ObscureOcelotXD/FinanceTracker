@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Stocks Tracker</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+    <script src="{{ url_for('static', filename='js/client-error.js') }}"></script>
 </head>
 <body>
     <h1>Manage Your Stocks</h1>
@@ -59,7 +60,11 @@
                       tbody.appendChild(row);
                   });
               })
-              .catch(error => console.error("Error fetching stocks:", error));
+              .catch(error => {
+                  if (typeof reportClientError === "function") {
+                      reportClientError("stocks_page", "fetch stocks failed", error && error.message);
+                  }
+              });
       }
 
       // Add new stock or update existing one
@@ -86,7 +91,12 @@
                   document.getElementById("stockId").value = "";
               }
           })
-          .catch(error => console.error("Error saving stock:", error));
+          .catch(error => {
+              if (typeof reportClientError === "function") {
+                  reportClientError("stocks_page", "save stock failed", error && error.message);
+              }
+              alert("Could not save. Please try again.");
+          });
       });
 
       // Edit a stock: populate the form with the existing data
@@ -98,7 +108,12 @@
                   document.getElementById("ticker").value = data.ticker;
                   document.getElementById("shares").value = data.shares;
               })
-              .catch(error => console.error("Error fetching stock for edit:", error));
+              .catch(error => {
+                  if (typeof reportClientError === "function") {
+                      reportClientError("stocks_page", "fetch stock for edit failed", error && error.message);
+                  }
+                  alert("Could not load stock for editing.");
+              });
       }
 
       // Delete a stock
@@ -115,7 +130,12 @@
                   fetchStocks();
               }
           })
-          .catch(error => console.error("Error deleting stock:", error));
+          .catch(error => {
+              if (typeof reportClientError === "function") {
+                  reportClientError("stocks_page", "delete stock failed", error && error.message);
+              }
+              alert("Could not delete. Please try again.");
+          });
       }
 
       // Initial load of stocks

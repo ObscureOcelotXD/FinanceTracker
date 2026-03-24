@@ -1,6 +1,17 @@
-from flask import Flask, render_template, jsonify, request, make_response, redirect, url_for
+from flask import (
+    Flask,
+    render_template,
+    jsonify,
+    request,
+    make_response,
+    redirect,
+    url_for,
+    got_request_exception,
+    has_request_context,
+)
 import os
 import logging
+import traceback
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -10,6 +21,51 @@ import db_manager
 from api.quant_risk import compute_risk_summary
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_LOG = logging.getLogger(__name__)
+
+
+def _env_truthy(name: str) -> bool:
+    return (os.getenv(name) or "").strip().lower() in ("1", "true", "yes")
+
+
+def _client_error_log_enabled() -> bool:
+    if _env_truthy("ENABLE_ERROR_LOG"):
+        return True
+    return _env_truthy("ENABLE_CLIENT_ERROR_LOG")
+
+
+def _server_error_log_enabled() -> bool:
+    if _env_truthy("ENABLE_ERROR_LOG"):
+        return True
+    return _env_truthy("ENABLE_SERVER_ERROR_LOG")
+
+
+def _register_server_exception_logging(app: Flask) -> None:
+    @got_request_exception.connect_via(app)
+    def _log_unhandled(sender, exception, **extra):
+        if not _server_error_log_enabled():
+            return
+        try:
+            from werkzeug.exceptions import HTTPException
+            if isinstance(exception, HTTPException):
+                code = exception.code
+                if code is None or code < 500:
+                    return
+        except Exception:
+            pass
+        try:
+            if has_request_context():
+                ep = request.endpoint or "unknown"
+                path = request.path or ""
+            else:
+                ep = "no_request"
+                path = ""
+            source = f"{ep}:{path}"[:120]
+            msg = f"{type(exception).__name__}: {exception}"[:2000]
+            detail = traceback.format_exc()[:4000]
+            db_manager.insert_app_error("server", source, msg, detail)
+        except Exception as exc:
+            _LOG.warning("server error log failed: %s", exc)
 
 
 def _public_app_context():
@@ -43,6 +99,8 @@ def create_flask_app():
     # Disable template caching
     app.config['TEMPLATES_AUTO_RELOAD'] = True
     app.jinja_env.auto_reload = True
+
+    _register_server_exception_logging(app)
 
     @app.route('/')
     def index():
@@ -140,6 +198,24 @@ def create_flask_app():
             return jsonify(compute_risk_summary())
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
+
+    # Optional: browser calls POST /api/client_error with {source, message, detail?} when client error logging is enabled.
+    @app.route("/api/client_error", methods=["POST"])
+    def client_error():
+        if not _client_error_log_enabled():
+            return jsonify({"status": "disabled"}), 200
+        payload = request.get_json(silent=True) or {}
+        source = str(payload.get("source") or "app")[:120]
+        message = str(payload.get("message") or "")[:2000]
+        detail = payload.get("detail")
+        if detail is not None:
+            detail = str(detail)[:4000]
+        try:
+            db_manager.insert_client_error(source, message, detail)
+        except Exception as exc:
+            _LOG.warning("client_error log failed: %s", exc)
+            return jsonify({"status": "error"}), 500
+        return jsonify({"status": "ok"}), 200
 
     app.register_blueprint(av.alpha_api)
 

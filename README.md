@@ -138,6 +138,15 @@ This app’s Plaid use case is **read-only personal financial management**:
 4. **Optional**
    - Leave `PLAID_WEBHOOK` unset or set it to `http://127.0.0.1:5000/webhook` if you want to receive product/status webhooks (optional for local use).
 
+### Browser console messages (Plaid Link)
+
+Messages about **Content-Security-Policy** / **script-src-attr** (often referencing `agent.umd.js` and `*.plaid.com`) come from **Plaid’s own Link UI** (CSP inside their iframe or bundled script), not from this repo’s HTML. They are usually **harmless** if Link opens and you can finish linking.
+
+- **Sentry** (`o*.ingest.sentry.io`, `NS_BINDING_ABORTED`): Plaid’s client error reporting. Ad blockers and privacy tools often block or cancel these requests; safe to ignore when Link behaves normally.
+- **Cookie `cookietest`**: Plaid probes third-party cookie behavior; browsers may reject it in cross-site contexts; expected.
+
+This app does **not** send a global `Content-Security-Policy` header on your pages. If you add a strict CSP later (e.g. behind a reverse proxy), follow [Plaid’s Link web docs](https://plaid.com/docs/link/web/) for `script-src`, `frame-src`, `connect-src`, and related directives.
+
 ### Fix: INVALID_LINK_CUSTOMIZATION / Data Transparency Messaging
 
 If Link shows **INVALID_LINK_CUSTOMIZATION** and *"At least one Data Transparency Messaging use case is required"*, Plaid requires you to configure **Data Transparency Messaging (DTM)** in the dashboard (required for US/Canada as of 2024):

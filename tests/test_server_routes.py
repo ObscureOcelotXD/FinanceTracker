@@ -146,3 +146,63 @@ def test_quant_risk_summary_returns_200_and_json(client):
     assert "beta" in data
     assert "last_updated" in data
     assert "fresh" in data
+
+
+def test_client_error_endpoint_disabled_by_default(client):
+    r = client.post("/api/client_error", json={"source": "t", "message": "m"})
+    assert r.status_code == 200
+    assert r.get_json() == {"status": "disabled"}
+
+
+def test_client_error_endpoint_stores_when_enabled(client, monkeypatch, temp_db):
+    import sqlite3
+
+    import db_manager
+
+    monkeypatch.setenv("ENABLE_CLIENT_ERROR_LOG", "1")
+    r = client.post(
+        "/api/client_error",
+        json={"source": "ui", "message": "fetch failed", "detail": "timeout"},
+    )
+    assert r.status_code == 200
+    assert r.get_json() == {"status": "ok"}
+    conn = sqlite3.connect(db_manager.DATABASE)
+    row = conn.execute(
+        "SELECT origin, source, message, detail FROM client_error_log ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    assert row == ("client", "ui", "fetch failed", "timeout")
+
+
+def test_server_unhandled_exception_logged_when_enabled(temp_db, monkeypatch):
+    import sqlite3
+
+    import db_manager
+
+    monkeypatch.setenv("ENABLE_SERVER_ERROR_LOG", "1")
+    from server import create_flask_app
+
+    app = create_flask_app()
+    app.config["TESTING"] = True
+    app.config["PROPAGATE_EXCEPTIONS"] = False
+
+    @app.route("/__test_crash")
+    def _crash():
+        raise ValueError("intentional test error")
+
+    with app.test_client() as c:
+        r = c.get("/__test_crash")
+        assert r.status_code == 500
+
+    conn = sqlite3.connect(db_manager.DATABASE)
+    row = conn.execute(
+        "SELECT origin, source, message FROM client_error_log ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    detail = conn.execute(
+        "SELECT detail FROM client_error_log ORDER BY id DESC LIMIT 1"
+    ).fetchone()[0]
+    conn.close()
+    assert row[0] == "server"
+    assert "__test_crash" in row[1]
+    assert "ValueError" in row[2]
+    assert detail and "intentional test error" in detail
