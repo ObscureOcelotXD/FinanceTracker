@@ -17,10 +17,10 @@ dash.register_page(
             [
                 dbc.Col(
                     dbc.Button(
-                        "🏠 Home",
+                        [html.I(className="bi bi-house-door me-2"), "Home"],
                         href="/",
                         color="secondary",
-                        className="mb-3 mt-2",
+                        className="mb-3 mt-2 stocks-home-btn",
                         external_link=True,
                     ),
                     width="auto",
@@ -28,7 +28,35 @@ dash.register_page(
             ],
             justify="start",
         ),
-        dbc.Row(dbc.Col(html.H1("Manage Stocks", className="text-center mb-2"), width=12)),
+        dbc.Row(
+            dbc.Col(
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.I(className="bi bi-sliders2-vertical stocks-hero-icon"),
+                                html.Div(
+                                    [
+                                        html.H2(
+                                            "Manage Stocks",
+                                            className="stocks-hero-title",
+                                        ),
+                                        html.P(
+                                            "Add positions, edit cost basis, and sync with Plaid imports.",
+                                            className="stocks-hero-subtitle mb-0",
+                                        ),
+                                    ],
+                                    className="flex-grow-1",
+                                ),
+                            ],
+                            className="d-flex align-items-start gap-3",
+                        ),
+                    ],
+                    className="neon-panel neon-green stocks-hero-banner mb-3",
+                ),
+                width=12,
+            )
+        ),
         dbc.Row(
             dbc.Col(
                 dbc.ButtonGroup(
@@ -36,7 +64,7 @@ dash.register_page(
                         dbc.Button(
                             "Unrealized",
                             href="/dashboard/stocks_manage",
-                            color="primary",
+                            color="success",
                             className="px-4",
                         ),
                         dbc.Button(
@@ -46,7 +74,7 @@ dash.register_page(
                             className="px-4",
                         ),
                     ],
-                    className="mb-3",
+                    className="mb-4 stocks-mode-toggle",
                 ),
                 width="auto",
             ),
@@ -106,10 +134,10 @@ dash.register_page(
                                         ),
                                         dbc.Col(
                                             dbc.Button(
-                                                "Add / Update",
+                                                [html.I(className="bi bi-plus-lg me-1"), "Add / Update"],
                                                 id="add-stock-button",
-                                                color="primary",
-                                                className="w-100 mb-2",
+                                                color="success",
+                                                className="w-100 mb-2 neon-action-btn",
                                             ),
                                             width=3,
                                         ),
@@ -121,7 +149,9 @@ dash.register_page(
                     ],
                     className="mb-4 neon-panel neon-green",
                 ),
-                width={"size": 6, "offset": 3}
+                xs=12,
+                lg=10,
+                className="mx-auto",
             )
         ),
 
@@ -206,7 +236,12 @@ dash.register_page(
                                         data=[],
                                         style_table={"overflowX": "auto"},
                                         style_cell={"textAlign": "center"},
-                                        style_header={"backgroundColor": "#1f2c3b", "fontWeight": "bold"},
+                                        style_header={
+                                            "backgroundColor": "rgba(6, 78, 59, 0.92)",
+                                            "fontWeight": "bold",
+                                            "color": "#d1fae5",
+                                            "borderBottom": "1px solid rgba(16, 185, 129, 0.35)",
+                                        },
                                         style_data={"backgroundColor": "#11181f"},
                                         style_data_conditional=[
                                             {
@@ -324,9 +359,11 @@ dash.register_page(
                             ]
                         ),
                     ],
-                    className="mb-4 neon-panel neon-yellow",
+                    className="mb-4 neon-panel neon-green",
                 ),
-                width={"size": 8, "offset": 2}
+                xs=12,
+                lg=10,
+                className="mx-auto",
             )
         )
         ,
@@ -400,7 +437,12 @@ dash.register_page(
                                         data=[],
                                         style_table={"overflowX": "auto"},
                                         style_cell={"textAlign": "center"},
-                                        style_header={"backgroundColor": "#1f2c3b", "fontWeight": "bold"},
+                                        style_header={
+                                            "backgroundColor": "rgba(6, 78, 59, 0.92)",
+                                            "fontWeight": "bold",
+                                            "color": "#d1fae5",
+                                            "borderBottom": "1px solid rgba(16, 185, 129, 0.35)",
+                                        },
                                         style_data={"backgroundColor": "#11181f"},
                                         style_data_conditional=[
                                             {
@@ -438,12 +480,14 @@ dash.register_page(
                             ]
                         ),
                     ],
-                    className="mb-4 neon-panel neon-yellow",
+                    className="mb-4 neon-panel neon-green",
                 ),
-                width={"size": 10, "offset": 1},
+                xs=12,
+                lg=10,
+                className="mx-auto",
             )
         )
-    ], fluid=True)
+    ], fluid=True, className="stocks-page-shell px-3 px-md-4 py-3")
 )
 
 # Add or update new stock

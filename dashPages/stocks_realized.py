@@ -22,10 +22,10 @@ dash.register_page(
                 [
                     dbc.Col(
                         dbc.Button(
-                            "🏠 Home",
+                            [html.I(className="bi bi-house-door me-2"), "Home"],
                             href="/",
                             color="secondary",
-                            className="mb-3 mt-2",
+                            className="mb-3 mt-2 stocks-home-btn",
                             external_link=True,
                         ),
                         width="auto",
@@ -33,7 +33,35 @@ dash.register_page(
                 ],
                 justify="start",
             ),
-            dbc.Row(dbc.Col(html.H1("Realized Gains", className="text-center mb-2"), width=12)),
+            dbc.Row(
+                dbc.Col(
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    html.I(className="bi bi-cash-stack stocks-hero-icon"),
+                                    html.Div(
+                                        [
+                                            html.H2(
+                                                "Realized Gains",
+                                                className="stocks-hero-title",
+                                            ),
+                                            html.P(
+                                                "Record sales, proceeds, and tax-year realized P&L.",
+                                                className="stocks-hero-subtitle mb-0",
+                                            ),
+                                        ],
+                                        className="flex-grow-1",
+                                    ),
+                                ],
+                                className="d-flex align-items-start gap-3",
+                            ),
+                        ],
+                        className="neon-panel neon-green stocks-hero-banner mb-3",
+                    ),
+                    width=12,
+                )
+            ),
             dbc.Row(
                 dbc.Col(
                     dbc.ButtonGroup(
@@ -47,11 +75,11 @@ dash.register_page(
                             dbc.Button(
                                 "Realized",
                                 href="/dashboard/stocks_realized",
-                                color="primary",
+                                color="success",
                                 className="px-4",
                             ),
                         ],
-                        className="mb-3",
+                        className="mb-4 stocks-mode-toggle",
                     ),
                     width="auto",
                 ),
@@ -162,10 +190,10 @@ dash.register_page(
                                             ),
                                             dbc.Col(
                                                 dbc.Button(
-                                                    "Add / Update",
+                                                    [html.I(className="bi bi-plus-lg me-1"), "Add / Update"],
                                                     id="add-realized-button",
-                                                    color="primary",
-                                                    className="w-100 mb-2",
+                                                    color="success",
+                                                    className="w-100 mb-2 neon-action-btn",
                                                 ),
                                                 width=3,
                                             ),
@@ -178,7 +206,9 @@ dash.register_page(
                         ],
                         className="mb-4 neon-panel neon-green",
                     ),
-                    width={"size": 10, "offset": 1},
+                    xs=12,
+                    lg=10,
+                    className="mx-auto",
                 )
             ),
             dbc.Row(
@@ -265,7 +295,12 @@ dash.register_page(
                                         data=[],
                                         style_table={"overflowX": "auto"},
                                         style_cell={"textAlign": "center"},
-                                        style_header={"backgroundColor": "#1f2c3b", "fontWeight": "bold"},
+                                        style_header={
+                                            "backgroundColor": "rgba(6, 78, 59, 0.92)",
+                                            "fontWeight": "bold",
+                                            "color": "#d1fae5",
+                                            "borderBottom": "1px solid rgba(16, 185, 129, 0.35)",
+                                        },
                                         style_data={"backgroundColor": "#11181f"},
                                         style_data_conditional=[
                                             {
@@ -338,13 +373,16 @@ dash.register_page(
                                 ]
                             ),
                         ],
-                        className="mb-4 neon-panel neon-yellow privacy-sensitive-visual",
+                        className="mb-4 neon-panel neon-green privacy-sensitive-visual",
                     ),
-                    width={"size": 10, "offset": 1},
+                    xs=12,
+                    lg=10,
+                    className="mx-auto",
                 )
             ),
         ],
         fluid=True,
+        className="stocks-page-shell px-3 px-md-4 py-3",
     ),
 )
 

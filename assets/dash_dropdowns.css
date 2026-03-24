@@ -1,26 +1,33 @@
 .chart-dropdown .Select-control {
-  background-color: #ffffff;
-  color: #000000;
-  border-color: #2b3035;
+  background-color: #111827;
+  color: #e5e7eb;
+  border-color: rgba(16, 185, 129, 0.35);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.12);
 }
 
 .chart-dropdown .Select-value-label,
 .chart-dropdown .Select-input input,
 .chart-dropdown .Select-placeholder {
-  color: #000000 !important;
+  color: #e5e7eb !important;
 }
 
 .chart-dropdown .Select-menu-outer,
 .chart-dropdown .Select-menu {
-  background-color: #d9f4d0; /* light green option list */
-  color: #000000;
+  background-color: #0f172a;
+  color: #e5e7eb;
+  border: 1px solid rgba(16, 185, 129, 0.35);
 }
 
 .chart-dropdown .Select-option {
-  background-color: #d9f4d0;
-  color: #000000;
+  background-color: #0f172a;
+  color: #e5e7eb;
 }
 
 .chart-dropdown .Select-option.is-focused {
-  background-color: #bfe9b3;
+  background-color: rgba(16, 185, 129, 0.22);
+  color: #ecfdf5;
+}
+
+.chart-dropdown .Select-arrow-zone .Select-arrow {
+  border-top-color: #34d399;
 }

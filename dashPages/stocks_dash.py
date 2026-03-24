@@ -223,10 +223,10 @@ layout = html.Div(
             [
                 dbc.Col(
                     dbc.Button(
-                        "🏠 Home",
+                        [html.I(className="bi bi-house-door me-2"), "Home"],
                         href="/",
                         color="secondary",
-                        className="mb-2 mt-2",
+                        className="mb-3 mt-2 stocks-home-btn",
                         external_link=True,
                     ),
                     width="auto",
@@ -234,42 +234,60 @@ layout = html.Div(
             ],
             justify="start",
         ),
-        html.H1(
-            "Stocks Dashboard",
-            style={
-                "textAlign": "center",
-                "marginBottom": "20px",
-                "fontFamily": "Arial, sans-serif",
-            },
+        dbc.Row(
+            dbc.Col(
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.I(className="bi bi-graph-up-arrow stocks-hero-icon"),
+                                html.Div(
+                                    [
+                                        html.H2(
+                                            "Stocks Dashboard",
+                                            className="stocks-hero-title",
+                                        ),
+                                        html.P(
+                                            "Portfolio value, allocation, sector mix, and price history.",
+                                            className="stocks-hero-subtitle mb-0",
+                                        ),
+                                    ],
+                                    className="flex-grow-1",
+                                ),
+                            ],
+                            className="d-flex align-items-start gap-3",
+                        ),
+                    ],
+                    className="neon-panel neon-green stocks-hero-banner mb-3",
+                ),
+                width=12,
+            )
         ),
         dbc.Row(
             [
                 dbc.Col(
-                    dbc.Alert(
+                    html.Div(
                         id="total-net-worth-banner",
-                        color="warning",
-                        className="text-center neon-panel neon-yellow",
-                        style={
-                            "fontSize": "1.4rem",
-                            "fontWeight": 700,
-                            "color": "#1fa24a",
-                            "backgroundColor": "transparent",
-                            "borderColor": "rgba(245,158,11,0.35)",
-                        },
+                        className="stocks-net-worth-tile text-center mb-3",
+                        children=html.Span(
+                            [
+                                html.Span("Total stock value: "),
+                                html.Span("$0.00", className="privacy-sensitive-text"),
+                            ]
+                        ),
                     ),
                     width=12,
                 )
             ],
-            className="mb-3",
         ),
         dbc.Row(
             [
                 dbc.Col(
                     dbc.Button(
-                        "Refresh Prices",
+                        [html.I(className="bi bi-arrow-repeat me-2"), "Refresh Prices"],
                         id="force-update-btn",
-                        color="info",
-                        className="mt-3 neon-danger-btn",
+                        color="success",
+                        className="mt-1 mb-2 neon-action-btn",
                     ),
                     width="auto",
                 )
@@ -441,7 +459,7 @@ layout = html.Div(
                                 ]
                             ),
                         ],
-                        className="mb-4 neon-panel neon-yellow privacy-sensitive-visual",
+                        className="mb-4 neon-panel neon-green privacy-sensitive-visual",
                     ),
                     width=12,
                 )
@@ -449,7 +467,7 @@ layout = html.Div(
         ),
         dcc.Store(id="stocks-store-display"),
     ],
-    style={"paddingTop": "50px"},
+    className="stocks-page-shell container-fluid px-3 px-md-4 pt-3",
 )
 
 

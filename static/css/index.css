@@ -13,11 +13,16 @@
             background-color: #111827;
             }
             .neon-panel.neon-green {
-            background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(15,23,42,1));
-            border-color: rgba(16,185,129,0.35);
+            background: linear-gradient(135deg,
+                rgba(16, 185, 129, 0.24) 0%,
+                rgba(5, 150, 105, 0.14) 32%,
+                rgba(59, 130, 246, 0.1) 58%,
+                rgba(15, 23, 42, 1) 100%);
+            border-color: rgba(16, 185, 129, 0.45);
             box-shadow:
-                0 0 18px rgba(16,185,129,0.25),
-                0 10px 30px rgba(0,0,0,0.45);
+                0 0 22px rgba(16, 185, 129, 0.28),
+                0 0 48px rgba(16, 185, 129, 0.08),
+                0 10px 30px rgba(0, 0, 0, 0.45);
             }
             .neon-panel.neon-yellow {
             background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(15,23,42,1));
