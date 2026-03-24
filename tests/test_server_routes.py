@@ -148,7 +148,11 @@ def test_quant_risk_summary_returns_200_and_json(client):
     assert "fresh" in data
 
 
-def test_client_error_endpoint_disabled_by_default(client):
+def test_client_error_endpoint_disabled_by_default(client, monkeypatch):
+    # .env may enable logging; this test asserts the endpoint is off when flags are unset.
+    monkeypatch.delenv("ENABLE_ERROR_LOG", raising=False)
+    monkeypatch.delenv("ENABLE_CLIENT_ERROR_LOG", raising=False)
+    monkeypatch.delenv("ENABLE_SERVER_ERROR_LOG", raising=False)
     r = client.post("/api/client_error", json={"source": "t", "message": "m"})
     assert r.status_code == 200
     assert r.get_json() == {"status": "disabled"}
