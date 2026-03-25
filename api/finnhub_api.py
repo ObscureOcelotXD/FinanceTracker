@@ -198,6 +198,31 @@ def fetch_company_profile(ticker):
     print(f"[Finnhub] {ticker} profile fetched.")
     return data
 
+
+def validate_equity_symbol(symbol: str):
+    """
+    Check whether a ticker looks like a real, active equity Finnhub recognizes.
+
+    Returns (True, None) if valid or if validation is skipped (no API key).
+    Returns (False, user_message) if the symbol is not recognized.
+
+    This uses the company profile endpoint (not a full exchange listing). It is
+    suitable for rejecting obvious typos and fake symbols without maintaining a
+    local registry; rate limits apply per check.
+    """
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return False, "Ticker cannot be empty."
+    key = _get_finnhub_api_key()
+    if not key:
+        return True, None
+    profile = fetch_company_profile(sym)
+    if not profile:
+        return False, f"{sym} is not a recognized stock ticker."
+    if profile.get("ticker") or profile.get("name"):
+        return True, None
+    return False, f"{sym} is not a recognized stock ticker."
+
 def get_sector_allocation_map(tickers, refresh_days: int = 7, force_refresh: bool = False):
     cached_records = get_sector_records(tickers)
     cached = {t: rec.get("sector") for t, rec in cached_records.items()}

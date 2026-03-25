@@ -3,6 +3,7 @@ from dash import html, dcc, ctx
 from dash.dash_table import DataTable, FormatTemplate
 import dash_bootstrap_components as dbc
 import db_manager
+from api import finnhub_api
 from dash.dependencies import Output, Input, State
 from dash.exceptions import PreventUpdate
 
@@ -79,6 +80,36 @@ dash.register_page(
                     ),
                     width="auto",
                 ),
+                justify="center",
+            ),
+            html.Div(id="manage-force-update-loading-target"),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Button(
+                            [html.I(className="bi bi-arrow-repeat me-2"), "Refresh Prices"],
+                            id="manage-force-update-btn",
+                            color="success",
+                            className="mt-1 mb-2 neon-action-btn",
+                        ),
+                        width="auto",
+                    )
+                ],
+                justify="center",
+            ),
+            dcc.Interval(id="manage-force-update-timer", interval=4000, n_intervals=0, disabled=True),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Alert(
+                            id="manage-force-update-alert",
+                            is_open=False,
+                            dismissable=True,
+                            className="mt-2",
+                        ),
+                        width="auto",
+                    )
+                ],
                 justify="center",
             ),
             dbc.Row(
@@ -657,6 +688,10 @@ def sync_stocks_from_table(_ts, prev, current, store_data):
             if sh_val < 0:
                 errors.append("Shares cannot be negative.")
                 continue
+            ok_sym, sym_msg = finnhub_api.validate_equity_symbol(t)
+            if not ok_sym:
+                errors.append(sym_msg)
+                continue
             cb = _norm_cost_basis(dr.get("cost_basis"))
             db_manager.insert_stock(t, sh_val, cost_basis=cb)
             inserted += 1
@@ -712,6 +747,16 @@ def sync_stocks_from_table(_ts, prev, current, store_data):
             os_ = None
         ocb = _norm_cost_basis(old.get("cost_basis"))
         if nt != ot or ns != os_ or ncb != ocb:
+            if nt != ot:
+                ok_sym, sym_msg = finnhub_api.validate_equity_symbol(nt)
+                if not ok_sym:
+                    return (
+                        dash.no_update,
+                        sym_msg,
+                        True,
+                        "danger",
+                        False,
+                    )
             db_manager.update_stock(rid, ticker=nt, shares=ns, cost_basis=ncb)
             updated += 1
 
@@ -836,6 +881,73 @@ def update_positions_summary(_ts, _store_data):
         ],
         className="d-flex flex-wrap align-items-baseline gap-1",
     )
+
+
+@dash.callback(
+    Output("stocks-store", "data", allow_duplicate=True),
+    Output("manage-force-update-alert", "children"),
+    Output("manage-force-update-alert", "is_open"),
+    Output("manage-force-update-alert", "color"),
+    Output("manage-force-update-btn", "children"),
+    Output("manage-force-update-btn", "disabled"),
+    Output("manage-force-update-timer", "disabled"),
+    Output("manage-force-update-loading-target", "children"),
+    Input("manage-force-update-btn", "n_clicks"),
+    State("stocks-store", "data"),
+    prevent_initial_call=True,
+)
+def manage_force_update_prices(n_clicks, current_counter):
+    if n_clicks is None:
+        return (
+            dash.no_update,
+            "",
+            False,
+            "info",
+            [html.I(className="bi bi-arrow-repeat me-2"), "Refresh Prices"],
+            False,
+            True,
+            dash.no_update,
+        )
+    try:
+        finnhub_api.update_stock_prices(forceUpdate=True)
+        tickers_df = db_manager.get_value_stocks()
+        tickers = tickers_df["ticker"].tolist() if not tickers_df.empty else []
+        if tickers:
+            finnhub_api.get_sector_allocation_map(tickers, force_refresh=True)
+        return (
+            (current_counter or 0) + 1,
+            "Prices updated.",
+            True,
+            "success",
+            [html.I(className="bi bi-arrow-repeat me-2"), "Refresh Prices"],
+            False,
+            False,
+            "",
+        )
+    except Exception as exc:
+        return (
+            dash.no_update,
+            f"Update failed: {exc}",
+            True,
+            "danger",
+            [html.I(className="bi bi-arrow-repeat me-2"), "Refresh Prices"],
+            False,
+            False,
+            "",
+        )
+
+
+@dash.callback(
+    Output("manage-force-update-alert", "is_open", allow_duplicate=True),
+    Output("manage-force-update-timer", "disabled", allow_duplicate=True),
+    Input("manage-force-update-timer", "n_intervals"),
+    State("manage-force-update-alert", "is_open"),
+    prevent_initial_call=True,
+)
+def manage_auto_hide_force_update_alert(_n_intervals, is_open):
+    if not is_open:
+        return False, True
+    return False, True
 
 
 @dash.callback(
