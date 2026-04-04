@@ -158,3 +158,108 @@ def test_plaid_helpers_use_configured_database_path(tmp_path, monkeypatch):
     conn.close()
 
     assert not (tmp_path / "finance_data.db").exists()
+
+
+def test_get_held_stock_tickers_distinct_upper(tmp_path):
+    _init_temp_db(tmp_path)
+    db_manager.insert_stock("aapl", 1.0, cost_basis=100.0)
+    db_manager.insert_stock("MSFT", 2.0, cost_basis=200.0)
+    assert db_manager.get_held_stock_tickers() == ["AAPL", "MSFT"]
+
+
+def test_news_digest_articles_upsert_and_list_filters(tmp_path):
+    _init_temp_db(tmp_path)
+    digest = {
+        "generated_at_utc": "2026-04-03T12:00:00+00:00",
+        "items": [
+            {
+                "title": "Fed holds rates",
+                "link": "https://example.com/a",
+                "source_feed": "CNBC",
+                "categories": ["rates", "markets"],
+                "tickers": ["MSFT"],
+                "ticker_companies": {"MSFT": "Manage Stocks"},
+            },
+            {
+                "title": "Oil slips",
+                "link": "https://example.com/b",
+                "source_feed": "BBC",
+                "categories": ["energy"],
+                "tickers": [],
+                "ticker_companies": {},
+            },
+        ],
+    }
+    assert db_manager.upsert_news_digest_articles_from_digest(digest) == 2
+    items, total, per = db_manager.list_news_digest_articles(page=1, per_page=10, sort="created")
+    assert total == 2
+    assert per == 10
+    assert len(items) == 2
+    assert items[0]["first_seen_at_utc"] == "2026-04-03T12:00:00+00:00"
+    assert items[0]["summary"] is None
+    rates_only, t2, _ = db_manager.list_news_digest_articles(
+        category="rates", per_page=20
+    )
+    assert t2 == 1
+    assert len(rates_only) == 1
+    assert rates_only[0]["link"] == "https://example.com/a"
+    msft_only, t3, _ = db_manager.list_news_digest_articles(ticker="MSFT")
+    assert t3 == 1
+    assert msft_only[0]["tickers"] == ["MSFT"]
+
+
+def test_normalize_news_article_url_strips_tracking_params():
+    raw = "https://EXAMPLE.com/Path/?utm_source=tw&id=1&utm_medium=x"
+    out = db_manager.normalize_news_article_url_string(raw)
+    assert "utm_" not in out
+    assert "example.com" in out
+    assert "id=1" in out
+
+
+def test_prune_news_digest_articles_deletes_old_by_first_seen(tmp_path):
+    _init_temp_db(tmp_path)
+    old = "2020-01-01T00:00:00+00:00"
+    conn = sqlite3.connect(db_manager.DATABASE)
+    conn.execute(
+        """
+        INSERT INTO news_digest_articles (
+            url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
+            first_seen_at_utc, last_seen_at_utc, summary
+        ) VALUES (?, ?, ?, '[]', '[]', '{}', ?, ?, NULL)
+        """,
+        ("https://old.com/z", "Old", "X", old, old),
+    )
+    conn.commit()
+    conn.close()
+    n = db_manager.prune_news_digest_articles(retention_days=90)
+    assert n >= 1
+    remaining, tot, _ = db_manager.list_news_digest_articles(per_page=50)
+    assert tot == 0
+
+
+def test_get_plaid_holdings_tickers_distinct_upper(tmp_path):
+    _init_temp_db(tmp_path)
+    conn = sqlite3.connect(db_manager.DATABASE)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO items (item_id, access_token, institution_name) VALUES (?, ?, ?)",
+        ("item-1", "tok", "Bank"),
+    )
+    cur.execute(
+        """
+        INSERT INTO accounts (account_id, name, official_name, type, subtype, current_balance, item_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("acct-1", "Brokerage", "Brokerage", "investment", "brokerage", 0.0, "item-1"),
+    )
+    cur.execute(
+        "INSERT INTO plaid_holdings (account_id, ticker, shares, cost_basis) VALUES (?, ?, ?, ?)",
+        ("acct-1", "nvda", 1.0, 100.0),
+    )
+    cur.execute(
+        "INSERT INTO plaid_holdings (account_id, ticker, shares, cost_basis) VALUES (?, ?, ?, ?)",
+        ("acct-1", "MSFT", 2.0, 200.0),
+    )
+    conn.commit()
+    conn.close()
+    assert db_manager.get_plaid_holdings_tickers() == ["MSFT", "NVDA"]

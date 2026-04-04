@@ -24,3 +24,7 @@ finance_data.db
 tempCodeRunnerFile.py
 sec-edgar-filings/
 sec_filings/
+
+# Generated news digest POC (keep directory; ignore outputs)
+data/news_digest/latest.json
+data/news_digest/latest.md

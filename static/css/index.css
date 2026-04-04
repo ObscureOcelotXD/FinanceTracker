@@ -38,6 +38,13 @@
                 0 0 18px rgba(59,130,246,0.25),
                 0 10px 30px rgba(0,0,0,0.45);
             }
+            .neon-panel.neon-purple {
+            background: linear-gradient(135deg, rgba(168,85,247,0.2), rgba(15,23,42,1));
+            border-color: rgba(168,85,247,0.38);
+            box-shadow:
+                0 0 18px rgba(168,85,247,0.28),
+                0 10px 30px rgba(0,0,0,0.45);
+            }
             .neon-panel.neon-slate {
             background: linear-gradient(135deg, rgba(148,163,184,0.16), rgba(15,23,42,1));
             border-color: rgba(148,163,184,0.28);
@@ -198,4 +205,49 @@
             }
             .app-footer a:hover {
             text-decoration: underline;
+            }
+            .news-digest-table-wrap {
+            border-radius: 10px;
+            border: 1px solid rgba(168, 85, 247, 0.25);
+            overflow: hidden;
+            }
+            .news-digest-table {
+            --bs-table-bg: rgba(15, 23, 42, 0.5);
+            --bs-table-border-color: rgba(148, 163, 184, 0.15);
+            margin-bottom: 0;
+            }
+            .news-digest-table thead th {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            border-bottom: 1px solid rgba(168, 85, 247, 0.35);
+            white-space: nowrap;
+            }
+            .news-digest-table tbody td {
+            vertical-align: top;
+            border-color: rgba(148, 163, 184, 0.12);
+            }
+            .news-digest-table tbody tr:hover {
+            background-color: rgba(168, 85, 247, 0.06);
+            }
+            .news-digest-col-headline {
+            min-width: 14rem;
+            max-width: 36rem;
+            }
+            .news-digest-col-outlet {
+            white-space: nowrap;
+            max-width: 10rem;
+            }
+            .news-digest-col-type {
+            max-width: 14rem;
+            }
+            .news-digest-col-tickers {
+            white-space: normal;
+            min-width: 6rem;
+            }
+            .news-digest-headline-link {
+            font-weight: 500;
+            }
+            .news-digest-headline-link:hover {
+            text-decoration: underline !important;
             }

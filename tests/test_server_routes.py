@@ -13,8 +13,9 @@ def temp_db(tmp_path):
 
 
 @pytest.fixture
-def client(temp_db):
+def client(temp_db, monkeypatch):
     """Flask test client using create_flask_app(). Depends on temp_db so DB is ready before server import."""
+    monkeypatch.setenv("NEWS_DIGEST_DISABLE_SCHEDULER", "1")
     from server import create_flask_app
     app = create_flask_app()
     app.config["TESTING"] = True
@@ -27,6 +28,9 @@ def test_index_returns_200(client):
     assert r.status_code == 200
     assert b"Privacy Mode" in r.data
     assert b'privacyModeSelect' in r.data
+    assert b"Daily news" in r.data
+    assert b"Headline" in r.data
+    assert b"newsDigestTableBody" in r.data
 
 
 def test_quant_returns_200(client):
@@ -136,6 +140,26 @@ def test_admin_upsert_etf_source_returns_resolved_source(client, monkeypatch):
     assert payload["source"]["source_type"] == "provider_csv"
 
 
+def test_api_news_digest_get_returns_json(client):
+    r = client.get("/api/news_digest")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "items" in data
+    assert isinstance(data["items"], list)
+
+
+def test_api_news_articles_list_returns_json(client):
+    r = client.get("/api/news_articles?page=1&per_page=10")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "items" in data
+    assert "total" in data
+    assert "page" in data
+    assert "per_page" in data
+    assert "pages" in data
+    assert isinstance(data["items"], list)
+
+
 def test_quant_risk_summary_returns_200_and_json(client):
     r = client.get("/quant/risk_summary")
     assert r.status_code == 200
@@ -183,6 +207,7 @@ def test_server_unhandled_exception_logged_when_enabled(temp_db, monkeypatch):
 
     import db_manager
 
+    monkeypatch.setenv("NEWS_DIGEST_DISABLE_SCHEDULER", "1")
     monkeypatch.setenv("ENABLE_SERVER_ERROR_LOG", "1")
     from server import create_flask_app
 

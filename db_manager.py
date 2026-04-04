@@ -1,7 +1,11 @@
+import hashlib
+import json
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
 import pandas as pd
 import re
 DATABASE = "finance_data.db"
@@ -272,6 +276,42 @@ def init_db():
     cur14.execute("""
         CREATE INDEX IF NOT EXISTS idx_client_error_log_created_at
         ON client_error_log (created_at)
+    """)
+
+    cur15 = con.cursor()
+    cur15.execute("""
+        CREATE TABLE IF NOT EXISTS news_digest_articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL UNIQUE,
+            title TEXT NOT NULL,
+            source_feed TEXT,
+            categories_json TEXT NOT NULL DEFAULT '[]',
+            tickers_json TEXT NOT NULL DEFAULT '[]',
+            ticker_companies_json TEXT NOT NULL DEFAULT '{}',
+            first_seen_at_utc TEXT NOT NULL,
+            last_seen_at_utc TEXT NOT NULL,
+            summary TEXT
+        )
+    """)
+    cur15.execute("PRAGMA table_info(news_digest_articles)")
+    _nda_cols = {row[1] for row in cur15.fetchall()}
+    if "summary" not in _nda_cols:
+        # TODO: populate from LLM or paid API when summaries are implemented.
+        cur15.execute("ALTER TABLE news_digest_articles ADD COLUMN summary TEXT")
+    # Drop legacy created_at_utc if present (SQLite 3.35+).
+    if "created_at_utc" in _nda_cols:
+        try:
+            cur15.execute("ALTER TABLE news_digest_articles DROP COLUMN created_at_utc")
+        except sqlite3.OperationalError:
+            pass
+    cur15.execute("DROP INDEX IF EXISTS idx_news_digest_articles_created")
+    cur15.execute("""
+        CREATE INDEX IF NOT EXISTS idx_news_digest_articles_last_seen
+        ON news_digest_articles (last_seen_at_utc DESC)
+    """)
+    cur15.execute("""
+        CREATE INDEX IF NOT EXISTS idx_news_digest_articles_first_seen
+        ON news_digest_articles (first_seen_at_utc DESC)
     """)
 
     con.commit()
@@ -603,6 +643,7 @@ def wipe_all_data(force: bool = False):
     _safe_delete("etf_sources")
     _safe_delete("sec_filing_summaries")
     _safe_delete("client_error_log")
+    _safe_delete("news_digest_articles")
     conn.commit()
     conn.close()
 
@@ -768,6 +809,265 @@ def get_all_records_df():
 
 
 #region Stock Data
+def get_held_stock_tickers():
+    """
+    Distinct tickers from the manual ``Stocks`` table (Manage Stocks), uppercase, sorted.
+    Used for portfolio-aware matching (e.g. news digest) without a separate symbol file.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT DISTINCT UPPER(TRIM(ticker)) AS t
+        FROM Stocks
+        WHERE TRIM(COALESCE(ticker, '')) != ''
+        ORDER BY t
+        """
+    )
+    rows = [r[0] for r in cur.fetchall() if r[0]]
+    conn.close()
+    return rows
+
+
+def get_plaid_holdings_tickers():
+    """
+    Distinct tickers from ``plaid_holdings`` (linked brokerage positions), uppercase, sorted.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT DISTINCT UPPER(TRIM(ticker)) AS t
+        FROM plaid_holdings
+        WHERE TRIM(COALESCE(ticker, '')) != ''
+        ORDER BY t
+        """
+    )
+    rows = [r[0] for r in cur.fetchall() if r[0]]
+    conn.close()
+    return rows
+
+
+_TRACKING_QUERY_PARAMS = frozenset(
+    {
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+        "fbclid",
+        "gclid",
+        "mc_cid",
+        "mc_eid",
+        "_ga",
+        "igshid",
+    }
+)
+
+
+def normalize_news_article_url_string(url: str) -> str:
+    """
+    Strip common tracking query params, normalize host casing, stable query ordering.
+    ``news:nolink:`` keys are returned unchanged.
+    """
+    u = (url or "").strip()
+    if not u or u.startswith("news:nolink:"):
+        return u
+    try:
+        if "://" not in u:
+            u = "https://" + u
+        p = urlparse(u)
+        netloc = (p.netloc or "").lower()
+        path = p.path or ""
+        if len(path) > 1 and path.endswith("/"):
+            path = path.rstrip("/")
+        q = parse_qs(p.query, keep_blank_values=False)
+        pairs: list[tuple[str, str]] = []
+        for k, vals in q.items():
+            if k.lower() in _TRACKING_QUERY_PARAMS:
+                continue
+            for v in vals:
+                pairs.append((k, v))
+        pairs.sort(key=lambda x: (x[0].lower(), x[1]))
+        new_query = urlencode(pairs) if pairs else ""
+        scheme = (p.scheme or "https").lower()
+        return urlunparse((scheme, netloc, path, p.params or "", new_query, ""))
+    except Exception:
+        return (url or "").strip()
+
+
+def canonical_news_article_url(item: dict[str, Any]) -> str:
+    """Stable row key: normalized URL, or ``news:nolink:<hash>`` when RSS has no link."""
+    link = (item.get("link") or "").strip()
+    if link:
+        return normalize_news_article_url_string(link)
+    title = (item.get("title") or "").strip()
+    h = hashlib.sha256(title.encode("utf-8")).hexdigest()[:16]
+    return f"news:nolink:{h}"
+
+
+def upsert_news_digest_articles_from_digest(digest: dict[str, Any]) -> int:
+    """
+    Persist digest items (same fields as the home table). Upsert by normalized ``url``;
+    ``first_seen_at_utc`` is set on first insert only; ``last_seen_at_utc`` updated on repeats.
+    ``summary`` is left NULL until filled by a future pipeline (see TODO in init_db).
+    """
+    items = digest.get("items") or []
+    if not items:
+        return 0
+    generated = (digest.get("generated_at_utc") or "").strip() or datetime.now(timezone.utc).isoformat()
+    conn = get_connection()
+    cur = conn.cursor()
+    n = 0
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        url = canonical_news_article_url(it)
+        title = (it.get("title") or "").strip() or "(no title)"
+        src = (it.get("source_feed") or "").strip() or None
+        cats = it.get("categories") if isinstance(it.get("categories"), list) else []
+        tickers = it.get("tickers") if isinstance(it.get("tickers"), list) else []
+        tc = it.get("ticker_companies") if isinstance(it.get("ticker_companies"), dict) else {}
+        cur.execute(
+            """
+            INSERT INTO news_digest_articles (
+                url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
+                first_seen_at_utc, last_seen_at_utc, summary
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+            ON CONFLICT(url) DO UPDATE SET
+                title = excluded.title,
+                source_feed = excluded.source_feed,
+                categories_json = excluded.categories_json,
+                tickers_json = excluded.tickers_json,
+                ticker_companies_json = excluded.ticker_companies_json,
+                last_seen_at_utc = excluded.last_seen_at_utc
+            """,
+            (
+                url,
+                title,
+                src,
+                json.dumps(cats, ensure_ascii=False),
+                json.dumps(tickers, ensure_ascii=False),
+                json.dumps(tc, ensure_ascii=False),
+                generated,
+                generated,
+            ),
+        )
+        n += 1
+    conn.commit()
+    conn.close()
+    return n
+
+
+def prune_news_digest_articles(retention_days: Optional[int] = None) -> int:
+    """
+    Delete rows whose ``first_seen_at_utc`` is older than ``retention_days`` (default 90, UTC).
+    Set env ``NEWS_DIGEST_RETENTION_DAYS`` to override; set to ``0`` to disable pruning.
+    """
+    if retention_days is None:
+        raw = (os.getenv("NEWS_DIGEST_RETENTION_DAYS") or "90").strip()
+        try:
+            retention_days = int(raw)
+        except ValueError:
+            retention_days = 90
+    if retention_days <= 0:
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    cutoff_s = cutoff.isoformat()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        DELETE FROM news_digest_articles
+        WHERE first_seen_at_utc < ?
+        """,
+        (cutoff_s,),
+    )
+    deleted = cur.rowcount if cur.rowcount is not None else 0
+    conn.commit()
+    conn.close()
+    return int(deleted)
+
+
+def list_news_digest_articles(
+    page: int = 1,
+    per_page: int = 20,
+    category: Optional[str] = None,
+    ticker: Optional[str] = None,
+    sort: str = "created",
+) -> tuple[list[dict[str, Any]], int, int]:
+    """
+    Paginated history for the news table. Optional filters: category slug (e.g. ``rates``),
+    ticker symbol (e.g. ``MSFT``). ``sort``: ``created`` (default) by ``first_seen_at_utc``,
+    or ``last_seen`` by ``last_seen_at_utc``. Returns (rows, total_count, per_page_effective).
+    """
+    page = max(1, int(page))
+    per_page = min(max(1, int(per_page)), 100)
+    offset = (page - 1) * per_page
+    sort_key = (sort or "created").strip().lower()
+    if sort_key not in ("created", "last_seen"):
+        sort_key = "created"
+
+    where_parts: list[str] = []
+    params: list[Any] = []
+    if category and str(category).strip():
+        where_parts.append(
+            "EXISTS (SELECT 1 FROM json_each(categories_json) WHERE LOWER(value) = ?)"
+        )
+        params.append(str(category).strip().lower())
+    if ticker and str(ticker).strip():
+        where_parts.append(
+            "EXISTS (SELECT 1 FROM json_each(tickers_json) WHERE UPPER(value) = ?)"
+        )
+        params.append(str(ticker).strip().upper())
+
+    where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+    order_sql = (
+        "ORDER BY last_seen_at_utc DESC"
+        if sort_key == "last_seen"
+        else "ORDER BY first_seen_at_utc DESC"
+    )
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"SELECT COUNT(*) FROM news_digest_articles{where_sql}", params)
+    total = int(cur.fetchone()[0])
+
+    cur.execute(
+        f"""
+        SELECT url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
+               first_seen_at_utc, last_seen_at_utc, summary
+        FROM news_digest_articles
+        {where_sql}
+        {order_sql}
+        LIMIT ? OFFSET ?
+        """,
+        params + [per_page, offset],
+    )
+    rows_out: list[dict[str, Any]] = []
+    for r in cur.fetchall():
+        url = r[0]
+        cats = json.loads(r[3] or "[]")
+        syms = json.loads(r[4] or "[]")
+        tc = json.loads(r[5] or "{}")
+        rows_out.append(
+            {
+                "url": url,
+                "title": r[1],
+                "link": "" if str(url).startswith("news:nolink:") else url,
+                "source_feed": r[2] or "",
+                "categories": cats,
+                "tickers": syms,
+                "ticker_companies": tc,
+                "first_seen_at_utc": r[6],
+                "last_seen_at_utc": r[7],
+                "summary": r[8],
+            }
+        )
+    conn.close()
+    return rows_out, total, per_page
+
+
 def get_stocks():
     conn = get_connection()
     query = """

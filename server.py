@@ -251,7 +251,114 @@ def create_flask_app():
 
     # from api.binance_api import binance_api
     # app.register_blueprint(binance_api)
+
+    @app.route("/api/news_digest", methods=["GET"])
+    def api_news_digest_get():
+        from api.news_digest import load_latest_digest
+
+        data = load_latest_digest()
+        if data is None:
+            return jsonify(
+                {
+                    "empty": True,
+                    "generated_at_utc": None,
+                    "items": [],
+                    "item_count": 0,
+                    "errors": [],
+                    "enrichment": "keywords_v1",
+                    "ticker_match_source": "portfolio",
+                    "held_tickers_count": 0,
+                    "portfolio_ticker_stats": {
+                        "manual_distinct": 0,
+                        "plaid_distinct": 0,
+                        "unique_for_matching": 0,
+                    },
+                    "ticker_companies": {},
+                }
+            )
+        return jsonify(data)
+
+    @app.route("/api/news_digest/refresh", methods=["POST"])
+    def api_news_digest_refresh():
+        try:
+            from api.news_digest import load_latest_digest, run_daily_digest_locked
+
+            run_daily_digest_locked()
+            data = load_latest_digest()
+            if data is None:
+                return jsonify({"error": "Digest not written"}), 500
+            return jsonify(data)
+        except Exception as exc:
+            _LOG.warning("news digest refresh failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/api/news_articles", methods=["GET"])
+    def api_news_articles_list():
+        """Stored news rows (same shape as the home table) with pagination and optional filters."""
+        try:
+            try:
+                page = int(request.args.get("page") or 1)
+            except (TypeError, ValueError):
+                page = 1
+            try:
+                per_page = int(request.args.get("per_page") or 20)
+            except (TypeError, ValueError):
+                per_page = 20
+            category = (request.args.get("category") or "").strip() or None
+            ticker = (request.args.get("ticker") or "").strip() or None
+            sort = (request.args.get("sort") or "created").strip() or "created"
+            items, total, per_effective = db_manager.list_news_digest_articles(
+                page=page,
+                per_page=per_page,
+                category=category,
+                ticker=ticker,
+                sort=sort,
+            )
+            pages = (total + per_effective - 1) // per_effective if total else 0
+            return jsonify(
+                {
+                    "items": items,
+                    "total": total,
+                    "page": max(1, page),
+                    "per_page": per_effective,
+                    "pages": pages,
+                }
+            )
+        except Exception as exc:
+            _LOG.warning("news_articles list failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    _start_news_digest_background()
     return app
+
+
+def _start_news_digest_background() -> None:
+    """6am local digest + startup catch-up; disable with NEWS_DIGEST_DISABLE_SCHEDULER=1."""
+    if _env_truthy("NEWS_DIGEST_DISABLE_SCHEDULER"):
+        return
+    import threading
+    import time
+
+    def startup():
+        try:
+            from api import news_digest
+
+            news_digest.maybe_run_on_startup()
+        except Exception as exc:
+            _LOG.warning("news digest startup: %s", exc)
+
+    def loop():
+        while True:
+            time.sleep(60)
+            try:
+                from api import news_digest
+
+                news_digest.maybe_run_at_scheduled_time()
+            except Exception as exc:
+                _LOG.warning("news digest scheduler: %s", exc)
+
+    threading.Thread(target=startup, daemon=True, name="news-digest-startup").start()
+    threading.Thread(target=loop, daemon=True, name="news-digest-scheduler").start()
 
 
 if __name__ == "__main__":
