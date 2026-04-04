@@ -12,6 +12,7 @@ from flask import (
 import os
 import logging
 import traceback
+from datetime import datetime
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -117,6 +118,12 @@ def create_flask_app():
     @app.route('/filings')
     def filings():
         resp = make_response(render_template('filings.html', public_app=_public_app_context()))
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.route("/news")
+    def news():
+        resp = make_response(render_template("news.html", public_app=_public_app_context()))
         resp.headers["Cache-Control"] = "no-store"
         return resp
 
@@ -294,34 +301,71 @@ def create_flask_app():
 
     @app.route("/api/news_articles", methods=["GET"])
     def api_news_articles_list():
-        """Stored news rows (same shape as the home table) with pagination and optional filters."""
+        """Stored news rows. With ``page`` query: offset pagination. Without ``page``: one local calendar day per response."""
         try:
-            try:
-                page = int(request.args.get("page") or 1)
-            except (TypeError, ValueError):
-                page = 1
-            try:
-                per_page = int(request.args.get("per_page") or 20)
-            except (TypeError, ValueError):
-                per_page = 20
-            category = (request.args.get("category") or "").strip() or None
-            ticker = (request.args.get("ticker") or "").strip() or None
-            sort = (request.args.get("sort") or "created").strip() or "created"
-            items, total, per_effective = db_manager.list_news_digest_articles(
-                page=page,
-                per_page=per_page,
-                category=category,
-                ticker=ticker,
-                sort=sort,
-            )
-            pages = (total + per_effective - 1) // per_effective if total else 0
+            if "page" in request.args:
+                try:
+                    page = int(request.args.get("page") or 1)
+                except (TypeError, ValueError):
+                    page = 1
+                try:
+                    per_page = int(request.args.get("per_page") or 20)
+                except (TypeError, ValueError):
+                    per_page = 20
+                category = (request.args.get("category") or "").strip() or None
+                ticker = (request.args.get("ticker") or "").strip() or None
+                sort = (request.args.get("sort") or "created").strip() or "created"
+                items, total, per_effective = db_manager.list_news_digest_articles(
+                    page=page,
+                    per_page=per_page,
+                    category=category,
+                    ticker=ticker,
+                    sort=sort,
+                )
+                pages = (total + per_effective - 1) // per_effective if total else 0
+                return jsonify(
+                    {
+                        "items": items,
+                        "total": total,
+                        "page": max(1, page),
+                        "per_page": per_effective,
+                        "pages": pages,
+                    }
+                )
+
+            from api.news_digest import load_latest_digest
+
+            raw_date = (request.args.get("date") or "").strip()
+            if raw_date:
+                try:
+                    datetime.strptime(raw_date, "%Y-%m-%d")
+                except ValueError:
+                    return jsonify({"error": "invalid date; use YYYY-MM-DD"}), 400
+
+            meta = db_manager.list_news_digest_local_dates_desc()
+            sorted_desc = [x["date"] for x in meta]
+            sorted_asc = sorted(sorted_desc)
+            if raw_date:
+                current = raw_date
+            elif sorted_desc:
+                current = sorted_desc[0]
+            else:
+                current = db_manager.today_local_iso_digest_tz()
+
+            items = db_manager.list_news_digest_articles_for_local_date(current)
+            older_date, newer_date = db_manager.news_digest_local_date_neighbors(sorted_asc, current)
+            latest = load_latest_digest()
+            gen = (latest or {}).get("generated_at_utc")
+            tz = db_manager.news_digest_schedule_tz()
+            tz_key = getattr(tz, "key", None) or str(tz)
             return jsonify(
                 {
                     "items": items,
-                    "total": total,
-                    "page": max(1, page),
-                    "per_page": per_effective,
-                    "pages": pages,
+                    "date": current,
+                    "older_date": older_date,
+                    "newer_date": newer_date,
+                    "schedule_tz": tz_key,
+                    "digest_generated_at_utc": gen,
                 }
             )
         except Exception as exc:

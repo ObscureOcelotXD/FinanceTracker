@@ -11,9 +11,16 @@ Outputs under data/news_digest/: latest.json, latest.md. Each run also **upserts
 summarization pipeline — see TODO in ``db_manager``). Pruning: set ``NEWS_DIGEST_RETENTION_DAYS``
 (default **90**, ``0`` disables) to drop rows whose ``first_seen_at_utc`` is older than that many days.
 
-**Ticker tagging** matches text against tickers in your portfolio: manual **Manage Stocks**
-rows and **Plaid-linked** holdings (distinct symbols). Finnhub validates symbols when you add
-stocks manually; Plaid supplies broker tickers. Later: LLM mention detection, full exchange lists.
+**Ticker tagging** matches **ticker symbols** (``$LMT``, ``(LMT)``, bare ``LMT`` in uppercase text,
+etc.) against your **current** holdings from the DB: **Manage Stocks** and **Plaid-linked**
+positions (see ``portfolio_ticker_universe``). Matching text is built from the RSS/Atom **title**,
+**description/summary**, **content** blocks when present, URL path words, and — when the feed omits a
+body (notably **Yahoo Finance** ``rssindex``, which often has **no** ``description`` in the XML) —
+an optional **HTTP fetch** of the article URL to read ``og:description`` / meta description (see
+``NEWS_DIGEST_FETCH_ARTICLE_SNIPPET``). Stored ``summary`` holds that combined text for re-tagging.
+Each digest run re-enriches items from the feeds; after persisting, stored rows for **today and
+yesterday** in ``NEWS_DIGEST_TZ`` are **re-tagged** from the DB so holdings added after a story first
+appeared still get badges on Refresh.
 
 Scheduling (when the Flask app runs): set NEWS_DIGEST_TZ (default America/New_York),
 NEWS_DIGEST_HOUR (default 6), NEWS_DIGEST_WINDOW_MINUTES (default 5). Automatic runs
@@ -30,9 +37,10 @@ import logging
 import os
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import feedparser
@@ -98,7 +106,177 @@ def _strip_html(s: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
+def _rss_entry_combined_plain_text(entry: Any) -> str:
+    """
+    Merge all RSS/Atom text fields so ticker symbols in the body (not only the headline) match.
+    Many feeds put tickers in ``content`` or ``summary_detail`` while ``description`` is shorter.
+    """
+    parts: list[str] = []
+    for key in ("summary", "description", "subtitle"):
+        v = entry.get(key)
+        if isinstance(v, str) and v.strip():
+            parts.append(_strip_html(v))
+    sd = entry.get("summary_detail")
+    if isinstance(sd, dict) and sd.get("value"):
+        parts.append(_strip_html(str(sd["value"])))
+    dd = entry.get("description_detail")
+    if isinstance(dd, dict) and dd.get("value"):
+        parts.append(_strip_html(str(dd["value"])))
+    for block in entry.get("content") or []:
+        if isinstance(block, dict) and block.get("value"):
+            parts.append(_strip_html(str(block["value"])))
+    blob = "\n".join(parts)
+    return re.sub(r"\s+", " ", blob.strip())
+
+
+def _article_snippet_fetch_enabled() -> bool:
+    return (os.getenv("NEWS_DIGEST_FETCH_ARTICLE_SNIPPET") or "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+
+
+def _max_article_snippet_fetches_per_digest() -> int:
+    raw = (os.getenv("NEWS_DIGEST_MAX_ARTICLE_SNIPPET_FETCHES") or "50").strip()
+    try:
+        n = int(raw)
+    except ValueError:
+        n = 50
+    return max(0, n)
+
+
+def _snippet_fetch_priority_urls_from_db(items: list[dict[str, Any]]) -> set[str]:
+    """Canonical URLs in ``items`` that already exist in the DB with NULL/empty ``summary``."""
+    import db_manager
+
+    canon: list[str] = []
+    for it in items:
+        if (it.get("summary_text") or "").strip():
+            continue
+        if not (it.get("link") or "").strip():
+            continue
+        canon.append(db_manager.canonical_news_article_url(it))
+    if not canon:
+        return set()
+    return db_manager.news_digest_urls_with_null_summary(canon)
+
+
+def _fill_article_snippets_for_items(
+    items: list[dict[str, Any]],
+    max_fetches: int,
+    *,
+    priority_urls: set[str] | None = None,
+) -> None:
+    """
+    After the digest list is final, fetch HTML meta descriptions for items with no RSS body.
+    This runs on the capped ``unique`` list — not on every row of every raw feed — so budget is
+    not spent on stories that never make it into the digest (fixes Yahoo items deep in the feed).
+    Rows that already exist in SQLite with NULL/empty ``summary`` are fetched first when
+    ``priority_urls`` is set (backfill before spending budget on first-time stories).
+    """
+    if max_fetches <= 0 or not _article_snippet_fetch_enabled():
+        return
+    import db_manager
+
+    need: list[dict[str, Any]] = []
+    for it in items:
+        st = (it.get("summary_text") or "").strip()
+        link = (it.get("link") or "").strip()
+        if st or not link:
+            continue
+        need.append(it)
+    if not need:
+        return
+
+    if priority_urls:
+        pri_u = set(priority_urls)
+        priority_items = [it for it in need if db_manager.canonical_news_article_url(it) in pri_u]
+        pri_keys = {db_manager.canonical_news_article_url(it) for it in priority_items}
+        rest_items = [it for it in need if db_manager.canonical_news_article_url(it) not in pri_keys]
+        ordered = priority_items + rest_items
+    else:
+        ordered = need
+
+    remaining = max_fetches
+    for it in ordered:
+        if remaining <= 0:
+            break
+        link = (it.get("link") or "").strip()
+        fetched = _fetch_article_snippet_from_url(link)
+        if fetched:
+            it["summary_text"] = fetched
+            remaining -= 1
+
+
+def _fetch_article_snippet_from_url(url: str) -> str:
+    """
+    When RSS has no body, load the article HTML and take ``og:description`` / meta description.
+    Yahoo Finance's top news RSS often omits ``<description>`` in the feed XML.
+    """
+    u = (url or "").strip()
+    if not u.startswith(("http://", "https://")):
+        return ""
+    if not _article_snippet_fetch_enabled():
+        return ""
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return ""
+    try:
+        r = requests.get(
+            u,
+            headers={
+                "User-Agent": _user_agent(),
+                "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+            },
+            timeout=18,
+        )
+        r.raise_for_status()
+        raw = r.text[:800_000]
+        soup = BeautifulSoup(raw, "lxml")
+        for attrs in (
+            {"property": "og:description"},
+            {"name": "twitter:description"},
+            {"name": "description"},
+        ):
+            tag = soup.find("meta", attrs=attrs)
+            if tag and tag.get("content"):
+                t = str(tag["content"]).strip()
+                if len(t) > 12:
+                    return re.sub(r"\s+", " ", t)[:12000]
+    except Exception as exc:
+        _LOG.debug("article snippet fetch failed for %s: %s", u, exc)
+    return ""
+
+
 _TICKER_TOKEN_RE = re.compile(r"\b([A-Z0-9]{1,5}(?:\.[A-Z])?)\b")
+
+
+def _url_path_as_search_text(link: str) -> str:
+    """Turn URL path segments (e.g. Yahoo slugs ``...-boeing-lockheed-...``) into space-separated words."""
+    if not (link or "").strip():
+        return ""
+    try:
+        path = (urlparse(link.strip()).path or "").strip("/")
+        if not path:
+            return ""
+        return re.sub(r"[-_/]+", " ", path)
+    except Exception:
+        return ""
+
+
+def matching_text_for_ticker_enrichment(title: str, summary: str, link: str = "") -> str:
+    """
+    Text used for ticker matching: title, combined RSS body (``summary_text``), and URL path words.
+    """
+    parts = [
+        (title or "").strip(),
+        (summary or "").strip(),
+        _url_path_as_search_text(link or ""),
+    ]
+    blob = "\n".join(p for p in parts if p)
+    return re.sub(r"\s+", " ", blob.strip())
 
 
 def match_tickers_from_universe(
@@ -106,7 +284,7 @@ def match_tickers_from_universe(
     universe: dict[str, str],
 ) -> tuple[list[str], dict[str, str]]:
     """
-    Find mentions of symbols that exist in ``universe`` (e.g. held tickers → label).
+    Find mentions of symbols that exist in ``universe`` (from DB holdings: ``portfolio_ticker_universe``).
     Uses ``$SYM``, ``NYSE: SYM``, ``(SYM)``, and bare tokens (length ≥2 in universe, plus class shares like BRK.A).
     Single-letter tickers only via ``$`` / exchange / parentheses.
     """
@@ -326,10 +504,11 @@ def _infer_categories(text: str) -> list[str]:
 
 
 def enrich_news_item(item: dict[str, Any], universe: dict[str, str] | None = None) -> None:
-    """Mutate item with ``categories``, ``tickers``, and ``ticker_companies`` from title + summary."""
+    """Mutate item with ``categories``, ``tickers``, and ``ticker_companies`` from title + summary + link slug."""
     title = (item.get("title") or "").strip()
     summary = (item.get("summary_text") or "").strip()
-    blob = re.sub(r"\s+", " ", f"{title}\n{summary}".strip())
+    link = (item.get("link") or "").strip()
+    blob = matching_text_for_ticker_enrichment(title, summary, link)
     item["categories"] = _infer_categories(blob)
     if universe is None:
         universe, _ = portfolio_ticker_universe()
@@ -350,7 +529,7 @@ def _user_agent() -> str:
 
 
 def _fetch_and_parse_feed(source_name: str, url: str) -> tuple[list[dict[str, Any]], str | None]:
-    """Return (items, error_message_or_none)."""
+    """Return (items, error_message_or_none). RSS body only; HTML snippet fetch happens in ``collect_digest``."""
     headers = {
         "User-Agent": _user_agent(),
         "Accept": "application/rss+xml, application/xml, text/xml, */*",
@@ -378,15 +557,7 @@ def _fetch_and_parse_feed(source_name: str, url: str) -> tuple[list[dict[str, An
             pub = str(pub) if pub else ""
         if not title and not link:
             continue
-        raw_summary = (
-            entry.get("summary")
-            or entry.get("description")
-            or entry.get("subtitle")
-            or ""
-        )
-        if not isinstance(raw_summary, str):
-            raw_summary = str(raw_summary) if raw_summary else ""
-        summary_text = _strip_html(raw_summary)
+        summary_text = _rss_entry_combined_plain_text(entry)
         items.append(
             {
                 "title": title,
@@ -446,6 +617,12 @@ def collect_digest(
         unique.append(it)
         if len(unique) >= max_items:
             break
+
+    _fill_article_snippets_for_items(
+        unique,
+        _max_article_snippet_fetches_per_digest(),
+        priority_urls=_snippet_fetch_priority_urls_from_db(unique),
+    )
 
     universe, ticker_stats = portfolio_ticker_universe()
     for it in unique:
@@ -510,6 +687,77 @@ def render_markdown(digest: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def retag_stored_articles_for_local_date(local_date: str) -> int:
+    """
+    Re-run portfolio ticker matching on all DB rows whose ``first_seen_at_utc`` falls on
+    ``local_date`` (``YYYY-MM-DD`` in ``NEWS_DIGEST_TZ``). Updates ``tickers_json`` /
+    ``ticker_companies_json`` when mentions match the **current** holdings universe.
+    """
+    import db_manager
+
+    universe, _ = portfolio_ticker_universe()
+    rows = db_manager.list_news_digest_articles_for_local_date(local_date)
+    if not rows:
+        return 0
+    processed = 0
+    for row in rows:
+        title = (row.get("title") or "").strip()
+        summary = (row.get("summary") or "").strip()
+        link = (row.get("link") or row.get("url") or "").strip()
+        blob = matching_text_for_ticker_enrichment(title, summary, link)
+        tickers, companies = match_tickers_from_universe(blob, universe)
+        url = row.get("url") or ""
+        if not url:
+            continue
+        db_manager.update_news_digest_article_tickers(url, tickers, companies)
+        processed += 1
+    return processed
+
+
+def _retag_recent_local_days_after_digest() -> None:
+    """After a digest write, refresh ticker badges for today and yesterday (local digest clock)."""
+    tz = _schedule_tz()
+    today = datetime.now(tz).date()
+    for delta in (0, 1):
+        d = (today - timedelta(days=delta)).isoformat()
+        try:
+            count = retag_stored_articles_for_local_date(d)
+            if count:
+                _LOG.info("news_digest: retagged portfolio tickers for %s (%d article(s))", d, count)
+        except Exception as exc:
+            _LOG.warning("news_digest: retag tickers for %s failed: %s", d, exc)
+
+
+def _backfill_null_summaries_after_digest(budget: int | None = None) -> int:
+    """
+    Fetch HTML snippets for recent DB articles that still have no summary.
+    This covers articles that fell out of the current digest's ``max_items`` cap.
+    Returns the number of summaries filled.
+    """
+    if not _article_snippet_fetch_enabled():
+        return 0
+    import db_manager
+
+    max_fetches = budget if budget is not None else _max_article_snippet_fetches_per_digest()
+    rows = db_manager.recent_news_digest_articles_with_null_summary(days=2)
+    if not rows:
+        return 0
+    filled = 0
+    for row in rows:
+        if filled >= max_fetches:
+            break
+        url = (row.get("url") or "").strip()
+        if not url:
+            continue
+        snippet = _fetch_article_snippet_from_url(url)
+        if snippet:
+            db_manager.update_news_digest_article_summary(url, snippet)
+            filled += 1
+    if filled:
+        _LOG.info("news_digest: backfilled %d null summary/summaries from HTML snippets", filled)
+    return filled
+
+
 def write_outputs(digest: dict[str, Any], out_dir: Path | None = None) -> tuple[Path, Path]:
     out_dir = out_dir or OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -522,6 +770,8 @@ def write_outputs(digest: dict[str, Any], out_dir: Path | None = None) -> tuple[
 
         n = db_manager.upsert_news_digest_articles_from_digest(digest)
         _LOG.info("news_digest_articles: upserted %d row(s)", n)
+        _backfill_null_summaries_after_digest()
+        _retag_recent_local_days_after_digest()
         pruned = db_manager.prune_news_digest_articles()
         if pruned:
             _LOG.info("news_digest_articles: pruned %d row(s) (retention)", pruned)

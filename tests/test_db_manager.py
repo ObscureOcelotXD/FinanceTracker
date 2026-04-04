@@ -208,6 +208,72 @@ def test_news_digest_articles_upsert_and_list_filters(tmp_path):
     assert msft_only[0]["tickers"] == ["MSFT"]
 
 
+def test_news_digest_urls_with_null_summary(tmp_path):
+    _init_temp_db(tmp_path)
+    conn = sqlite3.connect(db_manager.DATABASE)
+    t = "2026-01-01T12:00:00+00:00"
+    conn.execute(
+        """
+        INSERT INTO news_digest_articles (
+            url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
+            first_seen_at_utc, last_seen_at_utc, summary
+        ) VALUES (?, ?, ?, '[]', '[]', '{}', ?, ?, NULL)
+        """,
+        ("https://a.com/x", "A", "S", t, t),
+    )
+    conn.execute(
+        """
+        INSERT INTO news_digest_articles (
+            url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
+            first_seen_at_utc, last_seen_at_utc, summary
+        ) VALUES (?, ?, ?, '[]', '[]', '{}', ?, ?, ?)
+        """,
+        ("https://b.com/y", "B", "S", t, t, "has body"),
+    )
+    conn.commit()
+    conn.close()
+    s = db_manager.news_digest_urls_with_null_summary(["https://a.com/x", "https://b.com/y"])
+    assert s == {"https://a.com/x"}
+
+
+def test_news_digest_local_dates_day_bounds_and_neighbors(tmp_path):
+    _init_temp_db(tmp_path)
+    conn = sqlite3.connect(db_manager.DATABASE)
+    conn.execute(
+        """
+        INSERT INTO news_digest_articles (
+            url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
+            first_seen_at_utc, last_seen_at_utc, summary
+        ) VALUES (?, ?, ?, '[]', '[]', '{}', ?, ?, NULL)
+        """,
+        ("https://day-new.com", "New", "X", "2026-04-03T10:00:00+00:00", "2026-04-03T10:00:00+00:00"),
+    )
+    conn.execute(
+        """
+        INSERT INTO news_digest_articles (
+            url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
+            first_seen_at_utc, last_seen_at_utc, summary
+        ) VALUES (?, ?, ?, '[]', '[]', '{}', ?, ?, NULL)
+        """,
+        ("https://day-old.com", "Old", "X", "2026-04-01T15:00:00+00:00", "2026-04-01T15:00:00+00:00"),
+    )
+    conn.commit()
+    conn.close()
+    meta = db_manager.list_news_digest_local_dates_desc()
+    dates = [m["date"] for m in meta]
+    assert "2026-04-03" in dates and "2026-04-01" in dates
+    asc = sorted(dates)
+    older, newer = db_manager.news_digest_local_date_neighbors(asc, "2026-04-03")
+    assert older == "2026-04-01"
+    assert newer is None
+    older2, newer2 = db_manager.news_digest_local_date_neighbors(asc, "2026-04-01")
+    assert older2 is None
+    assert newer2 == "2026-04-03"
+    day_rows = db_manager.list_news_digest_articles_for_local_date("2026-04-01")
+    assert len(day_rows) == 1
+    assert day_rows[0]["url"] == "https://day-old.com"
+
+
 def test_normalize_news_article_url_strips_tracking_params():
     raw = "https://EXAMPLE.com/Path/?utm_source=tw&id=1&utm_medium=x"
     out = db_manager.normalize_news_article_url_string(raw)
@@ -235,6 +301,48 @@ def test_prune_news_digest_articles_deletes_old_by_first_seen(tmp_path):
     assert n >= 1
     remaining, tot, _ = db_manager.list_news_digest_articles(per_page=50)
     assert tot == 0
+
+
+def test_recent_null_summary_and_update_summary(tmp_path):
+    _init_temp_db(tmp_path)
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc).isoformat()
+    old = "2020-01-01T00:00:00+00:00"
+    conn = sqlite3.connect(db_manager.DATABASE)
+    conn.execute(
+        """INSERT INTO news_digest_articles
+        (url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
+         first_seen_at_utc, last_seen_at_utc, summary)
+        VALUES (?, ?, ?, '[]', '[]', '{}', ?, ?, NULL)""",
+        ("https://x.com/null-summary", "Null Article", "T", now, now),
+    )
+    conn.execute(
+        """INSERT INTO news_digest_articles
+        (url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
+         first_seen_at_utc, last_seen_at_utc, summary)
+        VALUES (?, ?, ?, '[]', '[]', '{}', ?, ?, 'already filled')""",
+        ("https://x.com/has-summary", "Filled Article", "T", now, now),
+    )
+    conn.execute(
+        """INSERT INTO news_digest_articles
+        (url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
+         first_seen_at_utc, last_seen_at_utc, summary)
+        VALUES (?, ?, ?, '[]', '[]', '{}', ?, ?, NULL)""",
+        ("https://x.com/old-null", "Old Null", "T", old, old),
+    )
+    conn.commit()
+    conn.close()
+
+    rows = db_manager.recent_news_digest_articles_with_null_summary(days=2)
+    urls = {r["url"] for r in rows}
+    assert "https://x.com/null-summary" in urls
+    assert "https://x.com/has-summary" not in urls
+    assert "https://x.com/old-null" not in urls
+
+    assert db_manager.update_news_digest_article_summary("https://x.com/null-summary", "Now filled")
+    rows2 = db_manager.recent_news_digest_articles_with_null_summary(days=2)
+    assert all(r["url"] != "https://x.com/null-summary" for r in rows2)
 
 
 def test_get_plaid_holdings_tickers_distinct_upper(tmp_path):

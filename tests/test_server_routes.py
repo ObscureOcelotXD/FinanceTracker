@@ -1,4 +1,4 @@
-"""Smoke tests for Flask routes: index, quant, filings, quant/risk_summary."""
+"""Smoke tests for Flask routes: index, quant, filings, news, quant/risk_summary."""
 import pandas as pd
 import pytest
 
@@ -28,9 +28,17 @@ def test_index_returns_200(client):
     assert r.status_code == 200
     assert b"Privacy Mode" in r.data
     assert b'privacyModeSelect' in r.data
-    assert b"Daily news" in r.data
-    assert b"Headline" in r.data
+    assert b"Today's news" in r.data
+    assert b"Coming soon" in r.data
+    assert b"View all news" in r.data
+
+
+def test_news_page_returns_200(client):
+    r = client.get("/news")
+    assert r.status_code == 200
+    assert b"All news" in r.data
     assert b"newsDigestTableBody" in r.data
+    assert b"Headline" in r.data
 
 
 def test_quant_returns_200(client):
@@ -158,6 +166,24 @@ def test_api_news_articles_list_returns_json(client):
     assert "per_page" in data
     assert "pages" in data
     assert isinstance(data["items"], list)
+
+
+def test_api_news_articles_day_mode_returns_json(client):
+    r = client.get("/api/news_articles")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "items" in data
+    assert "date" in data
+    assert "older_date" in data
+    assert "newer_date" in data
+    assert "schedule_tz" in data
+    assert "digest_generated_at_utc" in data
+    assert isinstance(data["items"], list)
+
+
+def test_api_news_articles_day_mode_invalid_date(client):
+    r = client.get("/api/news_articles?date=not-a-date")
+    assert r.status_code == 400
 
 
 def test_quant_risk_summary_returns_200_and_json(client):

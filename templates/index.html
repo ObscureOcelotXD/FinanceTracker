@@ -336,32 +336,22 @@
             <div class="col-12">
               <div class="neon-panel neon-purple">
                 <div class="neon-body">
-                  <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-2">
+                  <div class="d-flex align-items-start justify-content-between mb-3">
                     <div>
-                      <h2 class="h5 mb-1">Daily news</h2>
-                      <p class="text-secondary mb-0 small">RSS headlines (free feeds). Ticker tags when a symbol matches Manage Stocks or Plaid-linked holdings. Refreshes once per day automatically; use Refresh to update now.</p>
+                      <h2 class="h5 mb-1">Today's news</h2>
+                      <p class="text-secondary mb-0 small">AI summary of today’s headlines from your RSS digest. Full headlines, outlets, and ticker tags are on the news page.</p>
                     </div>
-                    <div class="d-flex align-items-center gap-2">
-                      <span class="badge bg-secondary-subtle text-secondary-emphasis" id="newsDigestMeta">Loading…</span>
-                      <button type="button" class="btn btn-outline-light btn-sm" id="newsDigestRefreshBtn" title="Fetch latest headlines now">
-                        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-                      </button>
+                    <div class="fs-3 flex-shrink-0 ms-2 news-card-icon" title="News">
+                      <i class="bi bi-newspaper"></i>
                     </div>
                   </div>
-                  <div class="table-responsive news-digest-table-wrap">
-                    <table class="table table-dark table-sm align-middle mb-0 news-digest-table">
-                      <thead>
-                        <tr>
-                          <th scope="col" class="news-digest-col-headline">Headline</th>
-                          <th scope="col" class="text-secondary news-digest-col-outlet">Outlet</th>
-                          <th scope="col" class="news-digest-col-type">Type</th>
-                          <th scope="col" class="news-digest-col-tickers">Tickers</th>
-                        </tr>
-                      </thead>
-                      <tbody id="newsDigestTableBody" class="small">
-                        <tr><td colspan="4" class="text-secondary">Loading…</td></tr>
-                      </tbody>
-                    </table>
+                  <div class="p-3 rounded border border-secondary border-opacity-25 bg-dark bg-opacity-25">
+                    <p class="text-secondary mb-0" id="newsAiSummaryBody">Coming soon</p>
+                  </div>
+                  <div class="mt-3">
+                    <a class="btn btn-outline-light btn-sm" href="/news">
+                      <i class="bi bi-newspaper me-1"></i>View all news
+                    </a>
                   </div>
                 </div>
               </div>
@@ -1022,126 +1012,6 @@ if (geckoBtn) {
           reportClientError('btc_wallet_summary', 'fetch failed', error && error.message);
         }
       });
-  </script>
-
-  <script>
-    (function () {
-      const tbodyEl = document.getElementById("newsDigestTableBody");
-      const metaEl = document.getElementById("newsDigestMeta");
-      const refreshBtn = document.getElementById("newsDigestRefreshBtn");
-      if (!tbodyEl || !metaEl || !refreshBtn) return;
-
-      function escapeHtml(s) {
-        const d = document.createElement("div");
-        d.textContent = s;
-        return d.innerHTML;
-      }
-
-      function formatTypeLabels(categories) {
-        if (!categories || !categories.length) {
-          return "—";
-        }
-        return categories.map(function (c) {
-          const x = String(c || "").trim();
-          if (!x) return "";
-          return x.charAt(0).toUpperCase() + x.slice(1);
-        }).filter(Boolean).join(", ");
-      }
-
-      function renderDigest(data) {
-        const items = (data && data.items) || [];
-        const when = data && data.generated_at_utc;
-        if (when) {
-          try {
-            const d = new Date(when);
-            metaEl.textContent = "Updated " + d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-          } catch (e) {
-            metaEl.textContent = "Updated";
-          }
-        } else {
-          metaEl.textContent = "No digest yet";
-        }
-        if (!items.length) {
-          tbodyEl.innerHTML = '<tr><td colspan="4" class="text-secondary">No headlines yet. Click Refresh to fetch.</td></tr>';
-          return;
-        }
-        tbodyEl.innerHTML = items.slice(0, 12).map(function (it) {
-          const title = (it.title || "(no title)").trim();
-          const link = (it.link || "").trim();
-          const src = (it.source_feed || "").trim();
-          const cats = Array.isArray(it.categories) ? it.categories : [];
-          const tickers = Array.isArray(it.tickers) ? it.tickers : [];
-          const tickerCos = it.ticker_companies && typeof it.ticker_companies === "object" ? it.ticker_companies : {};
-          const headline = link
-            ? '<a class="link-success text-decoration-none news-digest-headline-link" href="' + escapeHtml(link) + '" target="_blank" rel="noopener noreferrer" data-sensitive="text">' + escapeHtml(title) + "</a>"
-            : '<span data-sensitive="text">' + escapeHtml(title) + "</span>";
-          const outlet = src ? '<span class="text-secondary">' + escapeHtml(src) + "</span>" : '<span class="text-secondary">—</span>';
-          const typeCell = formatTypeLabels(cats);
-          const symBadges = tickers.map(function (s) {
-            const co = tickerCos[s];
-            const t = co ? escapeHtml(co) : "";
-            return '<span class="badge rounded-pill bg-dark border border-secondary text-warning font-monospace" title="' + t + '">' + escapeHtml(s) + "</span>";
-          }).join(" ");
-          const tickersCell = tickers.length ? symBadges : '<span class="text-secondary">—</span>';
-          return (
-            "<tr>" +
-            '<td class="news-digest-col-headline">' + headline + "</td>" +
-            '<td class="news-digest-col-outlet">' + outlet + "</td>" +
-            '<td class="news-digest-col-type">' + escapeHtml(typeCell) + "</td>" +
-            '<td class="news-digest-col-tickers">' + tickersCell + "</td>" +
-            "</tr>"
-          );
-        }).join("");
-      }
-
-      function loadDigest() {
-        metaEl.textContent = "Loading…";
-        tbodyEl.innerHTML = '<tr><td colspan="4" class="text-secondary">Loading…</td></tr>';
-        fetch("/api/news_digest")
-          .then(function (r) { return r.json(); })
-          .then(function (data) {
-            renderDigest(data);
-          })
-          .catch(function (err) {
-            tbodyEl.innerHTML = '<tr><td colspan="4" class="text-warning">Could not load digest.</td></tr>';
-            metaEl.textContent = "Error";
-            if (typeof reportClientError === "function") {
-              reportClientError("news_digest", err && err.message ? err.message : "fetch failed");
-            }
-          });
-      }
-
-      refreshBtn.addEventListener("click", function () {
-        refreshBtn.disabled = true;
-        metaEl.textContent = "Refreshing…";
-        tbodyEl.innerHTML = '<tr><td colspan="4" class="text-secondary">Refreshing…</td></tr>';
-        fetch("/api/news_digest/refresh", { method: "POST" })
-          .then(function (r) { return r.json(); })
-          .then(function (data) {
-            if (data.error) {
-              tbodyEl.innerHTML = '<tr><td colspan="4" class="text-warning">' + escapeHtml(String(data.error)) + "</td></tr>";
-              metaEl.textContent = "Error";
-              if (typeof reportClientError === "function") {
-                reportClientError("news_digest_refresh", data.error);
-              }
-              return;
-            }
-            renderDigest(data);
-          })
-          .catch(function (err) {
-            tbodyEl.innerHTML = '<tr><td colspan="4" class="text-warning">Refresh failed.</td></tr>';
-            metaEl.textContent = "Error";
-            if (typeof reportClientError === "function") {
-              reportClientError("news_digest_refresh", err && err.message ? err.message : "fetch failed");
-            }
-          })
-          .finally(function () {
-            refreshBtn.disabled = false;
-          });
-      });
-
-      loadDigest();
-    })();
   </script>
 
   <script src="{{ url_for('static', filename='js/privacy-mode.js') }}"></script>

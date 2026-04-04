@@ -45,6 +45,10 @@
                 0 0 18px rgba(168,85,247,0.28),
                 0 10px 30px rgba(0,0,0,0.45);
             }
+            /* Decorative icon on purple news card — same hue as neon-purple border/glow */
+            .neon-panel.neon-purple .news-card-icon {
+            color: #c084fc;
+            }
             .neon-panel.neon-slate {
             background: linear-gradient(135deg, rgba(148,163,184,0.16), rgba(15,23,42,1));
             border-color: rgba(148,163,184,0.28);

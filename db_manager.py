@@ -2,9 +2,11 @@ import hashlib
 import json
 import os
 import sqlite3
+import bisect
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import re
@@ -906,11 +908,35 @@ def canonical_news_article_url(item: dict[str, Any]) -> str:
     return f"news:nolink:{h}"
 
 
+def news_digest_urls_with_null_summary(urls: list[str]) -> set[str]:
+    """
+    Among the given canonical article URLs, return those already stored with NULL or blank ``summary``.
+    Used to prioritize HTML snippet fetches for rows still missing RSS body text.
+    """
+    cleaned = [str(u).strip() for u in urls if u and str(u).strip()]
+    if not cleaned:
+        return set()
+    conn = get_connection()
+    cur = conn.cursor()
+    placeholders = ",".join("?" * len(cleaned))
+    cur.execute(
+        f"""
+        SELECT url FROM news_digest_articles
+        WHERE url IN ({placeholders})
+          AND (summary IS NULL OR TRIM(summary) = '')
+        """,
+        cleaned,
+    )
+    out = {row[0] for row in cur.fetchall()}
+    conn.close()
+    return out
+
+
 def upsert_news_digest_articles_from_digest(digest: dict[str, Any]) -> int:
     """
     Persist digest items (same fields as the home table). Upsert by normalized ``url``;
     ``first_seen_at_utc`` is set on first insert only; ``last_seen_at_utc`` updated on repeats.
-    ``summary`` is left NULL until filled by a future pipeline (see TODO in init_db).
+    ``summary`` stores the RSS body text so re-tagging can match tickers later.
     """
     items = digest.get("items") or []
     if not items:
@@ -928,19 +954,21 @@ def upsert_news_digest_articles_from_digest(digest: dict[str, Any]) -> int:
         cats = it.get("categories") if isinstance(it.get("categories"), list) else []
         tickers = it.get("tickers") if isinstance(it.get("tickers"), list) else []
         tc = it.get("ticker_companies") if isinstance(it.get("ticker_companies"), dict) else {}
+        summary = (it.get("summary_text") or "").strip() or None
         cur.execute(
             """
             INSERT INTO news_digest_articles (
                 url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
                 first_seen_at_utc, last_seen_at_utc, summary
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(url) DO UPDATE SET
                 title = excluded.title,
                 source_feed = excluded.source_feed,
                 categories_json = excluded.categories_json,
                 tickers_json = excluded.tickers_json,
                 ticker_companies_json = excluded.ticker_companies_json,
-                last_seen_at_utc = excluded.last_seen_at_utc
+                last_seen_at_utc = excluded.last_seen_at_utc,
+                summary = COALESCE(excluded.summary, news_digest_articles.summary)
             """,
             (
                 url,
@@ -951,12 +979,75 @@ def upsert_news_digest_articles_from_digest(digest: dict[str, Any]) -> int:
                 json.dumps(tc, ensure_ascii=False),
                 generated,
                 generated,
+                summary,
             ),
         )
         n += 1
     conn.commit()
     conn.close()
     return n
+
+
+def update_news_digest_article_tickers(
+    url: str,
+    tickers: list[str],
+    ticker_companies: dict[str, str],
+) -> bool:
+    """Update stored ticker tags for a row (used after re-matching holdings against title/summary)."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE news_digest_articles
+        SET tickers_json = ?, ticker_companies_json = ?
+        WHERE url = ?
+        """,
+        (
+            json.dumps(tickers, ensure_ascii=False),
+            json.dumps(ticker_companies, ensure_ascii=False),
+            url,
+        ),
+    )
+    changed = cur.rowcount if cur.rowcount is not None else 0
+    conn.commit()
+    conn.close()
+    return bool(changed)
+
+
+def recent_news_digest_articles_with_null_summary(days: int = 2) -> list[dict[str, Any]]:
+    """
+    Return articles from the last *days* (by ``first_seen_at_utc``) that still have no summary.
+    Each dict has ``url``, ``title``, ``link`` (alias for url).
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    cur.execute(
+        """
+        SELECT url, title FROM news_digest_articles
+        WHERE (summary IS NULL OR TRIM(summary) = '')
+          AND first_seen_at_utc >= ?
+        ORDER BY first_seen_at_utc DESC
+        """,
+        (cutoff,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [{"url": r[0], "title": r[1], "link": r[0]} for r in rows]
+
+
+def update_news_digest_article_summary(url: str, summary: str) -> bool:
+    """Set the ``summary`` column for one article. Returns True if a row was updated."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE news_digest_articles SET summary = ? WHERE url = ?",
+        (summary, url),
+    )
+    changed = cur.rowcount if cur.rowcount is not None else 0
+    conn.commit()
+    conn.close()
+    return bool(changed)
 
 
 def prune_news_digest_articles(retention_days: Optional[int] = None) -> int:
@@ -987,6 +1078,124 @@ def prune_news_digest_articles(retention_days: Optional[int] = None) -> int:
     conn.commit()
     conn.close()
     return int(deleted)
+
+
+def news_digest_schedule_tz() -> ZoneInfo:
+    """Same calendar-day semantics as ``NEWS_DIGEST_TZ`` in ``api/news_digest``."""
+    try:
+        load_dotenv = __import__("dotenv", fromlist=["load_dotenv"]).load_dotenv
+        load_dotenv()
+    except Exception:
+        pass
+    name = (os.getenv("NEWS_DIGEST_TZ") or "America/New_York").strip()
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        return ZoneInfo("UTC")
+
+
+def local_day_start_end_utc_iso(local_date: str) -> tuple[str, str]:
+    """``local_date`` ``YYYY-MM-DD`` in :func:`news_digest_schedule_tz`; return UTC ISO bounds ``[start, end)``."""
+    tz = news_digest_schedule_tz()
+    d = datetime.strptime(local_date.strip(), "%Y-%m-%d").date()
+    start_local = datetime.combine(d, datetime.min.time(), tzinfo=tz)
+    end_local = start_local + timedelta(days=1)
+    return (
+        start_local.astimezone(timezone.utc).isoformat(),
+        end_local.astimezone(timezone.utc).isoformat(),
+    )
+
+
+def _news_digest_item_dict_from_row(r: tuple[Any, ...]) -> dict[str, Any]:
+    url = r[0]
+    cats = json.loads(r[3] or "[]")
+    syms = json.loads(r[4] or "[]")
+    tc = json.loads(r[5] or "{}")
+    return {
+        "url": url,
+        "title": r[1],
+        "link": "" if str(url).startswith("news:nolink:") else url,
+        "source_feed": r[2] or "",
+        "categories": cats,
+        "tickers": syms,
+        "ticker_companies": tc,
+        "first_seen_at_utc": r[6],
+        "last_seen_at_utc": r[7],
+        "summary": r[8],
+    }
+
+
+def list_news_digest_local_dates_desc() -> list[dict[str, Any]]:
+    """
+    Distinct calendar days (``NEWS_DIGEST_TZ``) that have at least one article, newest first.
+    Each item: ``{ "date": "YYYY-MM-DD", "count": int }``.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT first_seen_at_utc FROM news_digest_articles")
+    rows = cur.fetchall()
+    conn.close()
+    tz = news_digest_schedule_tz()
+    counts: dict[str, int] = {}
+    for (iso,) in rows:
+        if not iso:
+            continue
+        try:
+            dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        local_d = dt.astimezone(tz).date().isoformat()
+        counts[local_d] = counts.get(local_d, 0) + 1
+    out = [{"date": k, "count": counts[k]} for k in sorted(counts.keys(), reverse=True)]
+    return out
+
+
+def news_digest_local_date_neighbors(
+    sorted_dates_asc: list[str], current: str
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    ``sorted_dates_asc`` is distinct ``YYYY-MM-DD`` values ascending.
+    Returns ``(older_date, newer_date)``: older = further in the past, newer = closer to today.
+    If ``current`` has no rows but falls between two days with data, neighbors jump to those days.
+    """
+    asc = sorted_dates_asc
+    if not asc:
+        return None, None
+    if current in asc:
+        idx = asc.index(current)
+        return (asc[idx - 1] if idx > 0 else None, asc[idx + 1] if idx + 1 < len(asc) else None)
+    pos = bisect.bisect_left(asc, current)
+    older = asc[pos - 1] if pos > 0 else None
+    newer = asc[pos] if pos < len(asc) else None
+    return older, newer
+
+
+def today_local_iso_digest_tz() -> str:
+    """Today's calendar date ``YYYY-MM-DD`` in :func:`news_digest_schedule_tz`."""
+    now = datetime.now(news_digest_schedule_tz())
+    return now.date().isoformat()
+
+
+def list_news_digest_articles_for_local_date(local_date: str) -> list[dict[str, Any]]:
+    """All articles whose ``first_seen_at_utc`` falls on ``local_date`` in the digest schedule timezone."""
+    start_iso, end_iso = local_day_start_end_utc_iso(local_date)
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
+               first_seen_at_utc, last_seen_at_utc, summary
+        FROM news_digest_articles
+        WHERE first_seen_at_utc >= ? AND first_seen_at_utc < ?
+        ORDER BY first_seen_at_utc DESC
+        """,
+        (start_iso, end_iso),
+    )
+    rows_out = [_news_digest_item_dict_from_row(r) for r in cur.fetchall()]
+    conn.close()
+    return rows_out
 
 
 def list_news_digest_articles(
@@ -1044,26 +1253,7 @@ def list_news_digest_articles(
         """,
         params + [per_page, offset],
     )
-    rows_out: list[dict[str, Any]] = []
-    for r in cur.fetchall():
-        url = r[0]
-        cats = json.loads(r[3] or "[]")
-        syms = json.loads(r[4] or "[]")
-        tc = json.loads(r[5] or "{}")
-        rows_out.append(
-            {
-                "url": url,
-                "title": r[1],
-                "link": "" if str(url).startswith("news:nolink:") else url,
-                "source_feed": r[2] or "",
-                "categories": cats,
-                "tickers": syms,
-                "ticker_companies": tc,
-                "first_seen_at_utc": r[6],
-                "last_seen_at_utc": r[7],
-                "summary": r[8],
-            }
-        )
+    rows_out = [_news_digest_item_dict_from_row(r) for r in cur.fetchall()]
     conn.close()
     return rows_out, total, per_page
 
