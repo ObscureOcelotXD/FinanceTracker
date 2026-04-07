@@ -41,6 +41,17 @@ def test_api_home_insights_returns_json(client):
     assert isinstance(data.get("sources"), list)
 
 
+def test_api_sec_filing_job_status_returns_json(client):
+    r = client.get("/api/sec_filing_job_status")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "status" in data
+    assert data["status"] in ("idle", "running", "done", "error")
+    assert "finished_age_seconds" in data
+    assert "toast_eligible" in data
+    assert isinstance(data["toast_eligible"], bool)
+
+
 def test_news_page_returns_200(client):
     r = client.get("/news")
     assert r.status_code == 200

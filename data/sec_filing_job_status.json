@@ -1,0 +1,22 @@
+{
+  "job_id": "f25c7adf-1a0b-49eb-bb58-6080dd9b4a6f",
+  "status": "done",
+  "message": "Completed SEC filing run for PLTR. Summaries are saved locally.",
+  "log_lines": [
+    "Provider: Groq (primary) \u2192 Gemini (fallback)",
+    "",
+    "PLTR \u2014 Palantir Technologies Inc.",
+    "  10-K \u2014 2026-02-17",
+    "    summarized \u2014 model: groq:llama-3.3-70b-versatile",
+    "  10-Q \u2014 2025-11-04",
+    "    summarized \u2014 model: groq:llama-3.3-70b-versatile",
+    "",
+    "AI-generated summaries are approximate and for educational use only. Always read the official SEC filings at sec.gov. Not financial advice or investment recommendation."
+  ],
+  "error": null,
+  "tickers": [
+    "PLTR"
+  ],
+  "updated_at": "2026-04-07T23:43:11+00:00",
+  "finished_at": "2026-04-07T23:43:11+00:00"
+}

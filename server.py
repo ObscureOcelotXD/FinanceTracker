@@ -328,6 +328,12 @@ def create_flask_app():
             _LOG.warning("news digest refresh failed: %s", exc)
             return jsonify({"error": str(exc)}), 500
 
+    @app.route("/api/sec_filing_job_status", methods=["GET"])
+    def api_sec_filing_job_status():
+        from services import sec_filing_job
+
+        return jsonify(sec_filing_job.read_status())
+
     @app.route("/api/home_insights", methods=["GET"])
     def api_home_insights_get():
         from api.home_insights import get_home_insights_payload

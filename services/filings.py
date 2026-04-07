@@ -18,7 +18,7 @@ import re
 import time
 from datetime import date
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import streamlit as st
 import yfinance as yf
@@ -27,7 +27,7 @@ from google import genai
 import pyrate_limiter
 import requests
 
-from services import db_manager
+from services import db_manager, sec_filing_job
 
 _LOG = logging.getLogger(__name__)
 
@@ -166,6 +166,7 @@ def _download_filings(
     ticker: str,
     filing_types: Iterable[str],
     after_date: str,
+    log_lines: Optional[List[str]] = None,
 ) -> None:
     for ftype in filing_types:
         existing = _find_filing_files(base_dir, ticker, ftype)
@@ -180,7 +181,11 @@ def _download_filings(
                 limit=MAX_FILINGS_PER_TYPE,
             )
         except Exception as exc:
-            st.warning(f"{ticker} {ftype}: download failed ({exc}).")
+            msg = f"{ticker} {ftype}: download failed ({exc})."
+            if log_lines is not None:
+                log_lines.append(msg)
+            else:
+                st.warning(msg)
         time.sleep(DOWNLOAD_PAUSE_SECONDS)
 
 
@@ -467,6 +472,71 @@ def _summarize_chunks(client, chunks: Iterable[str], model_name: str) -> Tuple[L
     return summaries, combined, ", ".join(label) if len(label) == 1 else f"mixed:{', '.join(label)}"
 
 
+def run_sec_filing_pipeline(
+    tickers: List[str],
+    filing_types: List[str],
+    after_date: date,
+    force_refresh: bool,
+    base_dir: Path,
+) -> Dict[str, Any]:
+    """
+    Download and summarize filings; persist to DB. Safe to call from a background thread (no Streamlit UI).
+    """
+    log_lines: List[str] = []
+    _prune_old_filings(base_dir)
+    dl = _create_downloader(base_dir)
+    try:
+        client, model_name = _init_gemini()
+    except Exception as exc:
+        return {"ok": False, "message": "", "log_lines": [], "error": str(exc)}
+
+    log_lines.append("Provider: Groq (primary) → Gemini (fallback)")
+    for ticker in tickers:
+        log_lines.append("")
+        log_lines.append(_ticker_label(ticker))
+        _download_filings(dl, base_dir, ticker, filing_types, after_date.isoformat(), log_lines)
+
+        for ftype in filing_types:
+            files = _find_filing_files(base_dir, ticker, ftype)
+            if not files:
+                log_lines.append(f"  {ftype}: no filings found.")
+                continue
+
+            latest = files[0]
+            filing_date = _guess_filing_date(latest)
+            log_lines.append(f"  {ftype} — {filing_date}")
+
+            doc_hash = _hash_file(latest)
+            cached = None if force_refresh else db_manager.get_sec_summary(doc_hash)
+            if cached:
+                log_lines.append("    (cached summary)")
+            else:
+                try:
+                    text = _extract_text(latest)
+                except Exception as exc:
+                    log_lines.append(f"    failed to parse filing ({exc}).")
+                    continue
+
+                chunks = _chunk_text(text)
+                summaries, combined, used_model = _summarize_chunks(client, chunks, model_name)
+                summary_text = combined or "\n".join(summaries)
+                log_lines.append(f"    summarized — model: {used_model}")
+                db_manager.upsert_sec_summary(
+                    doc_hash=doc_hash,
+                    ticker=ticker,
+                    filing_type=ftype,
+                    filing_date=filing_date,
+                    source_path=str(latest),
+                    summary_text=summary_text,
+                    model=used_model,
+                )
+
+    msg = f"Completed SEC filing run for {', '.join(tickers)}. Summaries are saved locally."
+    log_lines.append("")
+    log_lines.append(DISCLAIMER)
+    return {"ok": True, "message": msg, "log_lines": log_lines, "error": None}
+
+
 def _ticker_label(ticker: str) -> str:
     try:
         info = yf.Ticker(ticker).info
@@ -478,6 +548,26 @@ def _ticker_label(ticker: str) -> str:
     return ticker
 
 
+def _sec_job_runner(
+    job_id: str,
+    tickers: List[str],
+    filing_types: List[str],
+    after_iso: str,
+    force_refresh: bool,
+) -> None:
+    result = run_sec_filing_pipeline(
+        tickers=tickers,
+        filing_types=filing_types,
+        after_date=date.fromisoformat(after_iso),
+        force_refresh=force_refresh,
+        base_dir=Path.cwd(),
+    )
+    if result["ok"]:
+        sec_filing_job.write_done(job_id, result["message"], result["log_lines"], tickers)
+    else:
+        sec_filing_job.write_error(job_id, result.get("error") or "Pipeline failed", tickers)
+
+
 def main() -> None:
     st.set_page_config(page_title="SEC Filings Info", layout="wide")
     st.title("SEC Filings Info")
@@ -486,6 +576,8 @@ def main() -> None:
     db_manager.init_db()
     _patch_sec_gateway()
     _prune_sec_summary_rows()
+
+    status = sec_filing_job.read_status()
 
     with st.sidebar:
         st.header("Inputs")
@@ -512,78 +604,69 @@ def main() -> None:
             scope = ", ".join(scope_parts) if scope_parts else "all summaries"
             st.success(f"Cached summaries cleared ({scope}).")
 
-    if not run_btn:
-        st.info("Enter tickers and click Fetch & Summarize.")
-        return
-
-    tickers = _parse_tickers(tickers_raw)
-    if not tickers:
-        st.error("Please enter at least one ticker.")
-        return
-
-    if not filing_types:
-        st.error("Select at least one filing type.")
-        return
-
-    base_dir = Path.cwd()
-    _prune_old_filings(base_dir)
-    dl = _create_downloader(base_dir)
-
-    try:
-        client, model_name = _init_gemini()
-    except Exception as exc:
-        st.error(str(exc))
-        return
-    st.caption("Provider: Groq (primary) → Gemini (fallback)")
-    st.write("### Results")
-    for ticker in tickers:
-        st.subheader(_ticker_label(ticker))
-        _download_filings(dl, base_dir, ticker, filing_types, after_date.isoformat())
-
-        for ftype in filing_types:
-            files = _find_filing_files(base_dir, ticker, ftype)
-            if not files:
-                st.warning(f"{ftype}: no filings found.")
-                continue
-
-            latest = files[0]
-            filing_date = _guess_filing_date(latest)
-            st.markdown(f"**{ftype}** — {filing_date}")
-            st.caption(f"Source file: {latest}")
-
-            doc_hash = _hash_file(latest)
-            cached = None if force_refresh else db_manager.get_sec_summary(doc_hash)
-            if cached:
-                st.markdown(cached["summary_text"] or "")
-                st.caption("Cached summary")
+    if run_btn:
+        tickers = _parse_tickers(tickers_raw)
+        if not tickers:
+            st.error("Please enter at least one ticker.")
+        elif not filing_types:
+            st.error("Select at least one filing type.")
+        else:
+            started = sec_filing_job.start_job_if_idle(
+                tickers,
+                filing_types,
+                after_date.isoformat(),
+                force_refresh,
+                _sec_job_runner,
+            )
+            if not started:
+                st.warning("A SEC filing job is already running.")
             else:
-                try:
-                    text = _extract_text(latest)
-                except Exception as exc:
-                    st.error(f"{ftype}: failed to parse filing ({exc}).")
-                    continue
+                st.rerun()
 
-                chunks = _chunk_text(text)
-                summaries, combined, used_model = _summarize_chunks(client, chunks, model_name)
-                summary_text = combined or "\n".join(summaries)
-                st.markdown(summary_text)
-                st.caption(f"Used model: {used_model}")
-                db_manager.upsert_sec_summary(
-                    doc_hash=doc_hash,
-                    ticker=ticker,
-                    filing_type=ftype,
-                    filing_date=filing_date,
-                    source_path=str(latest),
-                    summary_text=summary_text,
-                    model=used_model,
-                )
+    if status.get("status") == "running":
+        st.info(
+            "SEC filing job **running in the background**. You can switch tabs or leave this page; "
+            "summaries are written to the local database when finished. "
+            "The main FinanceTracker dashboard can show a short completion notice while it is open."
+        )
+        with st.spinner("Working…"):
+            time.sleep(2)
+        st.rerun()
 
-            st.divider()
+    done_acked = st.session_state.setdefault("sec_done_acked_jobs", [])
+    err_acked = st.session_state.setdefault("sec_err_acked_jobs", [])
 
-    st.caption(DISCLAIMER)
+    if status.get("status") == "error":
+        jid = status.get("job_id")
+        if jid and jid not in err_acked:
+            if status.get("toast_eligible"):
+                st.toast("SEC filings job failed.", icon="⚠️")
+            err_acked.append(jid)
+            st.error(status.get("error") or "Unknown error")
+        elif jid:
+            st.caption(f"Last SEC job failed: {status.get('error')}")
+
+    if status.get("status") == "done":
+        jid = status.get("job_id")
+        if jid and jid not in done_acked:
+            if status.get("toast_eligible"):
+                st.toast("SEC filings fetch & summarize completed.", icon="✅")
+            done_acked.append(jid)
+            st.success(status.get("message", "Completed"))
+            with st.expander("Job log", expanded=False):
+                st.text("\n".join(status.get("log_lines") or []))
+        elif jid:
+            st.caption(f"Last SEC job: {status.get('message', 'Done')}")
+
+    if status.get("status") in (None, "idle") and not run_btn:
+        st.info(
+            "Enter tickers and click **Fetch & Summarize**. The run continues in the background "
+            "so you do not need to keep this tab focused."
+        )
+
     st.caption(
-        "If Gemini rate limits or fails, you can swap the summarizer to a local model "
-        "(Ollama) or a low-cost API like Groq in the same summarize function."
+        "If Gemini rate limits or fails, Groq is used when configured. "
+        "Full summary text is stored in the database — use **Show history** below to read it."
     )
 
     if show_history:

@@ -263,3 +263,29 @@
             .news-digest-headline-link:hover {
             text-decoration: underline !important;
             }
+            .ft-sec-job-toast {
+            position: fixed;
+            bottom: 1.25rem;
+            right: 1.25rem;
+            z-index: 1080;
+            max-width: min(420px, calc(100vw - 2rem));
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            background: rgba(15, 23, 42, 0.96);
+            border: 1px solid rgba(34, 197, 94, 0.45);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+            color: #e5e7eb;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            pointer-events: none;
+            }
+            .ft-sec-job-toast.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+            }
+            .ft-sec-job-toast.is-error {
+            border-color: rgba(248, 113, 113, 0.5);
+            }

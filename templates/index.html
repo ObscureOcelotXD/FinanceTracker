@@ -1038,5 +1038,68 @@ if (geckoBtn) {
       loadInsights();
     })();
   </script>
+  <div id="secFilingJobToast" class="ft-sec-job-toast" role="status" aria-live="polite" hidden></div>
+  <script>
+    (function () {
+      var el = document.getElementById("secFilingJobToast");
+      if (!el) return;
+      var STORAGE_KEY = "ft_sec_notified_job";
+      var timer = null;
+      function hideToast() {
+        el.classList.remove("is-visible");
+        el.hidden = true;
+        if (timer) clearTimeout(timer);
+        timer = null;
+      }
+      function showToast(msg, isError) {
+        el.textContent = msg;
+        el.classList.toggle("is-error", !!isError);
+        el.hidden = false;
+        requestAnimationFrame(function () {
+          el.classList.add("is-visible");
+        });
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(hideToast, 10000);
+      }
+      function readSeen() {
+        try {
+          var raw = sessionStorage.getItem(STORAGE_KEY);
+          return raw ? JSON.parse(raw) : {};
+        } catch (e) {
+          return {};
+        }
+      }
+      function writeSeen(obj) {
+        try {
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+        } catch (e) {}
+      }
+      function poll() {
+        fetch("/api/sec_filing_job_status", { credentials: "same-origin" })
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (data) {
+            if (!data || !data.job_id) return;
+            var st = data.status;
+            var jid = data.job_id;
+            var seen = readSeen();
+            if (st === "done" && seen.done !== jid && data.toast_eligible) {
+              showToast(data.message || "SEC filings job completed.", false);
+              seen.done = jid;
+              writeSeen(seen);
+            }
+            if (st === "error" && seen.error !== jid && data.toast_eligible) {
+              showToast(data.error || "SEC filings job failed.", true);
+              seen.error = jid;
+              writeSeen(seen);
+            }
+          })
+          .catch(function () {});
+      }
+      poll();
+      setInterval(poll, 5000);
+    })();
+  </script>
   <script src="{{ url_for('static', filename='js/privacy-mode.js') }}"></script>
 </html>
