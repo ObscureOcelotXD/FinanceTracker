@@ -45,6 +45,37 @@ def _decrypt_plaid_access_token_at_rest(stored: str) -> str:
         return stored
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _ensure_items_timestamp_columns(c: sqlite3.Cursor) -> None:
+    c.execute("PRAGMA table_info(items)")
+    cols = [row[1] for row in c.fetchall()]
+    if "first_linked_at_utc" not in cols:
+        c.execute("ALTER TABLE items ADD COLUMN first_linked_at_utc TEXT")
+    if "updated_at_utc" not in cols:
+        c.execute("ALTER TABLE items ADD COLUMN updated_at_utc TEXT")
+
+
+def _ensure_items_institution_columns(c: sqlite3.Cursor) -> None:
+    c.execute("PRAGMA table_info(items)")
+    cols = [row[1] for row in c.fetchall()]
+    if "institution_name" not in cols:
+        c.execute("ALTER TABLE items ADD COLUMN institution_name TEXT")
+    if "institution_id" not in cols:
+        c.execute("ALTER TABLE items ADD COLUMN institution_id TEXT")
+
+
+def _ensure_accounts_timestamp_columns(c: sqlite3.Cursor) -> None:
+    c.execute("PRAGMA table_info(accounts)")
+    cols = [row[1] for row in c.fetchall()]
+    if "first_seen_at_utc" not in cols:
+        c.execute("ALTER TABLE accounts ADD COLUMN first_seen_at_utc TEXT")
+    if "updated_at_utc" not in cols:
+        c.execute("ALTER TABLE accounts ADD COLUMN updated_at_utc TEXT")
+
+
 def get_connection():
     return sqlite3.connect(DATABASE)
 
@@ -71,13 +102,16 @@ def init_db():
             official_name TEXT,
             type TEXT,
             subtype TEXT,
-            current_balance REAL
+            current_balance REAL,
+            first_seen_at_utc TEXT,
+            updated_at_utc TEXT
         )
     """)
     cur2.execute("PRAGMA table_info(accounts)")
     account_columns = [row[1] for row in cur2.fetchall()]
     if "item_id" not in account_columns:
         cur2.execute("ALTER TABLE accounts ADD COLUMN item_id TEXT")
+    _ensure_accounts_timestamp_columns(cur2)
 
     cur3 = con.cursor()
     cur3.execute("""
@@ -191,9 +225,12 @@ def init_db():
             item_id TEXT PRIMARY KEY,
             access_token TEXT,
             institution_name TEXT,
-            institution_id TEXT
+            institution_id TEXT,
+            first_linked_at_utc TEXT,
+            updated_at_utc TEXT
         )
     """)
+    _ensure_items_timestamp_columns(cur7)
 
     cur8 = con.cursor()
     cur8.execute("""
@@ -512,18 +549,24 @@ def insert_items(item_id, access_token):
             item_id TEXT PRIMARY KEY,
             access_token TEXT,
             institution_name TEXT,
-            institution_id TEXT
+            institution_id TEXT,
+            first_linked_at_utc TEXT,
+            updated_at_utc TEXT
         )
     """)
-    c.execute("PRAGMA table_info(items)")
-    item_columns = [row[1] for row in c.fetchall()]
-    if "institution_name" not in item_columns:
-        c.execute("ALTER TABLE items ADD COLUMN institution_name TEXT")
-    if "institution_id" not in item_columns:
-        c.execute("ALTER TABLE items ADD COLUMN institution_id TEXT")
+    _ensure_items_institution_columns(c)
+    _ensure_items_timestamp_columns(c)
+    now = _utc_now_iso()
+    enc = _encrypt_plaid_access_token_at_rest(access_token)
     c.execute(
-        "INSERT OR REPLACE INTO items (item_id, access_token) VALUES (?, ?)",
-        (item_id, _encrypt_plaid_access_token_at_rest(access_token)),
+        """
+        INSERT INTO items (item_id, access_token, first_linked_at_utc, updated_at_utc)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(item_id) DO UPDATE SET
+            access_token = excluded.access_token,
+            updated_at_utc = excluded.updated_at_utc
+        """,
+        (item_id, enc, now, now),
     )
     conn.commit()
     conn.close()
@@ -532,19 +575,15 @@ def insert_items(item_id, access_token):
 def update_item_institution(item_id, institution_name=None, institution_id=None):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("PRAGMA table_info(items)")
-    item_columns = [row[1] for row in c.fetchall()]
-    if "institution_name" not in item_columns:
-        c.execute("ALTER TABLE items ADD COLUMN institution_name TEXT")
-    if "institution_id" not in item_columns:
-        c.execute("ALTER TABLE items ADD COLUMN institution_id TEXT")
+    _ensure_items_institution_columns(c)
+    _ensure_items_timestamp_columns(c)
     c.execute(
         """
         UPDATE items
-        SET institution_name = ?, institution_id = ?
+        SET institution_name = ?, institution_id = ?, updated_at_utc = ?
         WHERE item_id = ?
         """,
-        (institution_name, institution_id, item_id),
+        (institution_name, institution_id, _utc_now_iso(), item_id),
     )
     conn.commit()
     conn.close()
@@ -559,13 +598,129 @@ def get_items():
             access_token TEXT
         )
     """)
-    c.execute("SELECT item_id, access_token FROM items")
+    _ensure_items_institution_columns(c)
+    _ensure_items_timestamp_columns(c)
+    c.execute(
+        """
+        SELECT item_id, access_token, institution_name, institution_id,
+               first_linked_at_utc, updated_at_utc
+        FROM items
+        """
+    )
     rows = c.fetchall()
     conn.close()
     return [
-        {"item_id": row[0], "access_token": _decrypt_plaid_access_token_at_rest(row[1])}
+        {
+            "item_id": row[0],
+            "access_token": _decrypt_plaid_access_token_at_rest(row[1]),
+            "institution_name": row[2],
+            "institution_id": row[3],
+            "first_linked_at_utc": row[4],
+            "updated_at_utc": row[5],
+        }
         for row in rows
     ]
+
+
+def list_plaid_items_public():
+    """Linked Plaid items for UI/API (no access tokens)."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS items (
+            item_id TEXT PRIMARY KEY,
+            access_token TEXT
+        )
+    """)
+    _ensure_items_institution_columns(c)
+    _ensure_items_timestamp_columns(c)
+    c.execute(
+        """
+        SELECT item_id, institution_name, institution_id, first_linked_at_utc, updated_at_utc
+        FROM items
+        ORDER BY COALESCE(first_linked_at_utc, '') DESC, item_id
+        """
+    )
+    rows = c.fetchall()
+    conn.close()
+    return [
+        {
+            "item_id": row[0],
+            "institution_name": row[1],
+            "institution_id": row[2],
+            "first_linked_at_utc": row[3],
+            "updated_at_utc": row[4],
+        }
+        for row in rows
+    ]
+
+
+def find_plaid_items_matching_institution(
+    institution_id=None,
+    institution_name=None,
+    exclude_item_id=None,
+):
+    """
+    Return full item dicts (including access_token) that match the same institution as
+    a new link, excluding the new item_id. Used to replace stale Items on relink.
+    """
+    matches = []
+    for row in get_items():
+        if exclude_item_id and row["item_id"] == exclude_item_id:
+            continue
+        if institution_id and row.get("institution_id") == institution_id:
+            matches.append(row)
+        elif (
+            not institution_id
+            and institution_name
+            and (row.get("institution_name") or "").strip().lower()
+            == institution_name.strip().lower()
+        ):
+            matches.append(row)
+    return matches
+
+
+def delete_plaid_item_data(item_id: str) -> dict[str, int]:
+    """Delete local accounts, transactions, holdings, and the items row for one Plaid item."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT account_id FROM accounts WHERE item_id = ?", (item_id,))
+    account_ids = [r[0] for r in c.fetchall()]
+    txn_deleted = 0
+    holdings_deleted = 0
+    if account_ids:
+        q_marks = ",".join("?" * len(account_ids))
+        c.execute(
+            f"DELETE FROM transactions WHERE account_id IN ({q_marks})",
+            account_ids,
+        )
+        txn_deleted = c.rowcount if c.rowcount is not None else 0
+        c.execute(
+            f"DELETE FROM plaid_holdings WHERE account_id IN ({q_marks})",
+            account_ids,
+        )
+        holdings_deleted = c.rowcount if c.rowcount is not None else 0
+    c.execute("DELETE FROM accounts WHERE item_id = ?", (item_id,))
+    accounts_deleted = c.rowcount if c.rowcount is not None else 0
+    c.execute("DELETE FROM items WHERE item_id = ?", (item_id,))
+    items_deleted = c.rowcount if c.rowcount is not None else 0
+    conn.commit()
+    conn.close()
+    return {
+        "transactions_deleted": txn_deleted,
+        "plaid_holdings_deleted": holdings_deleted,
+        "accounts_deleted": accounts_deleted,
+        "items_deleted": items_deleted,
+    }
+
+
+def get_plaid_item_by_id(item_id: str) -> Optional[dict[str, Any]]:
+    """Single linked item including decrypted access token, or None."""
+    for row in get_items():
+        if row["item_id"] == item_id:
+            return row
+    return None
+
 
 def store_accounts(accounts, item_id=None):
     conn = get_connection()
@@ -574,20 +729,37 @@ def store_accounts(accounts, item_id=None):
     account_columns = [row[1] for row in c.fetchall()]
     if "item_id" not in account_columns:
         c.execute("ALTER TABLE accounts ADD COLUMN item_id TEXT")
+    _ensure_accounts_timestamp_columns(c)
+    now = _utc_now_iso()
     for account in accounts:
-        c.execute("""
-            INSERT OR REPLACE INTO accounts 
-            (account_id, name, official_name, type, subtype, current_balance, item_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            account.account_id,
-            account.name,
-            account.official_name,
-            str(account.type),
-            str(account.subtype),
-            account.balances.current,
-            item_id,
-        ))
+        c.execute(
+            """
+            INSERT INTO accounts (
+                account_id, name, official_name, type, subtype, current_balance, item_id,
+                first_seen_at_utc, updated_at_utc
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(account_id) DO UPDATE SET
+                name = excluded.name,
+                official_name = excluded.official_name,
+                type = excluded.type,
+                subtype = excluded.subtype,
+                current_balance = excluded.current_balance,
+                item_id = excluded.item_id,
+                updated_at_utc = excluded.updated_at_utc
+            """,
+            (
+                account.account_id,
+                account.name,
+                account.official_name,
+                str(account.type),
+                str(account.subtype),
+                account.balances.current,
+                item_id,
+                now,
+                now,
+            ),
+        )
     conn.commit()
     conn.close()
 

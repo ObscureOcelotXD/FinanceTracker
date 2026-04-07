@@ -132,6 +132,12 @@ def create_flask_app():
         resp.headers["Cache-Control"] = "no-store"
         return resp
 
+    @app.route("/plaid")
+    def plaid_management():
+        resp = make_response(render_template("plaid.html", public_app=_public_app_context()))
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
     @app.route('/quant')
     def quant():
         resp = make_response(render_template('quant.html', public_app=_public_app_context()))

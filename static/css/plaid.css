@@ -1,0 +1,179 @@
+/* Plaid Management — frost / silver / ice-blue neon */
+
+body.plaid-mgmt-page {
+  font-family: "Inter", "Segoe UI", Arial, sans-serif;
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(56, 189, 248, 0.12), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 100% 50%, rgba(148, 163, 184, 0.08), transparent 45%),
+    linear-gradient(165deg, #0a0e14 0%, #0f1419 40%, #111827 100%);
+  color: #e2e8f0;
+}
+
+body.plaid-mgmt-page .text-secondary {
+  color: #94a3b8 !important;
+}
+
+.plaid-mgmt-page .plaid-hero {
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.22);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(148, 163, 184, 0.06) 35%,
+    rgba(30, 41, 59, 0.85) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 0 40px rgba(56, 189, 248, 0.12),
+    0 0 80px rgba(148, 163, 184, 0.06),
+    0 16px 40px rgba(0, 0, 0, 0.5);
+  padding: 1.5rem 1.75rem;
+  backdrop-filter: blur(10px);
+}
+
+.plaid-mgmt-page .plaid-hero h1 {
+  color: #f8fafc;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-shadow: 0 0 24px rgba(224, 242, 254, 0.35);
+}
+
+.plaid-mgmt-page .plaid-panel {
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: linear-gradient(
+    160deg,
+    rgba(51, 65, 85, 0.45) 0%,
+    rgba(15, 23, 42, 0.92) 55%,
+    rgba(15, 23, 42, 0.98) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 0 28px rgba(56, 189, 248, 0.08),
+    0 12px 32px rgba(0, 0, 0, 0.45);
+  padding: 1.35rem 1.5rem;
+  backdrop-filter: blur(8px);
+}
+
+.plaid-mgmt-page .plaid-panel h2 {
+  color: #f1f5f9;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.plaid-mgmt-page .plaid-panel .section-title {
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+}
+
+.plaid-mgmt-page .form-check-input:checked {
+  background-color: #38bdf8;
+  border-color: #7dd3fc;
+}
+
+.plaid-mgmt-page .form-check-input:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 0.2rem rgba(56, 189, 248, 0.25);
+}
+
+.plaid-mgmt-page .btn-plaid-connect {
+  color: #0f172a;
+  font-weight: 600;
+  border: none;
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 45%, #94a3b8 100%);
+  box-shadow:
+    0 0 20px rgba(226, 232, 240, 0.35),
+    0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.plaid-mgmt-page .btn-plaid-connect:hover:not(:disabled) {
+  color: #020617;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+  box-shadow:
+    0 0 28px rgba(224, 242, 254, 0.45),
+    0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.plaid-mgmt-page .btn-plaid-connect:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.plaid-mgmt-page .btn-plaid-disconnect {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.2);
+}
+
+.plaid-mgmt-page .btn-plaid-disconnect:hover {
+  color: #fef2f2;
+  border-color: rgba(252, 165, 165, 0.6);
+  background: rgba(153, 27, 27, 0.35);
+}
+
+.plaid-mgmt-page .table-plaid {
+  --bs-table-bg: transparent;
+  --bs-table-color: #e2e8f0;
+  --bs-table-border-color: rgba(148, 163, 184, 0.25);
+  margin-bottom: 0;
+  font-size: 0.875rem;
+}
+
+.plaid-mgmt-page .table-plaid thead th {
+  color: #cbd5e1;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom-color: rgba(148, 163, 184, 0.35);
+}
+
+.plaid-mgmt-page .table-plaid tbody td {
+  vertical-align: middle;
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+.plaid-mgmt-page .table-plaid code {
+  color: #bae6fd;
+  font-size: 0.8rem;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+}
+
+.plaid-mgmt-page .plaid-status {
+  min-height: 1.25rem;
+  color: #94a3b8;
+  font-size: 0.875rem;
+}
+
+.plaid-mgmt-page .plaid-nav .btn-outline-light {
+  border-color: rgba(226, 232, 240, 0.35);
+  color: #e2e8f0;
+}
+
+.plaid-mgmt-page .plaid-nav .btn-outline-light:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(226, 232, 240, 0.55);
+  color: #f8fafc;
+}
+
+.plaid-mgmt-page a.link-plaid {
+  color: #7dd3fc;
+}
+
+.plaid-mgmt-page a.link-plaid:hover {
+  color: #bae6fd;
+}
+
+.plaid-mgmt-page .badge-plaid-scope {
+  background: rgba(56, 189, 248, 0.15);
+  color: #e0f2fe;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  font-weight: 500;
+}

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Plaid Management — {{ public_app.app_name }}</title>
+    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.3/dist/darkly/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/plaid.css') }}">
+  </head>
+  <body class="plaid-mgmt-page">
+    <div class="container py-4">
+      <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4 plaid-nav">
+        <div>
+          <a class="btn btn-outline-light btn-sm mb-2" href="/">
+            <i class="bi bi-arrow-left me-1"></i>Back to dashboard
+          </a>
+          <h1 class="h4 mb-0 text-light">Plaid Management</h1>
+          <p class="text-secondary small mb-0 mt-1">Connect institutions, review linked items, disconnect when needed.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <a class="btn btn-outline-light btn-sm" href="/privacy">
+            <i class="bi bi-shield-check me-1"></i>Privacy
+          </a>
+          <a class="btn btn-outline-light btn-sm" href="/terms">
+            <i class="bi bi-file-earmark-text me-1"></i>Terms
+          </a>
+          <a class="btn btn-outline-light btn-sm" href="/support">
+            <i class="bi bi-life-preserver me-1"></i>Support
+          </a>
+        </div>
+      </div>
+
+      <div class="plaid-hero mb-4">
+        <div class="row g-3 align-items-center">
+          <div class="col-lg-8">
+            <h1 class="h5 mb-2">Bank &amp; investment linking</h1>
+            <p class="text-secondary mb-0 small">
+              Read-only access via Plaid: balances, transactions, and holdings for your dashboards.
+              Scope: <span class="badge badge-plaid-scope rounded-pill">transactions</span>
+              <span class="badge badge-plaid-scope rounded-pill ms-1">investments</span>
+              — no payments, transfers, or trading.
+            </p>
+          </div>
+          <div class="col-lg-4">
+            <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
+              <span class="badge rounded-pill border border-secondary text-secondary">Local-first</span>
+              <span class="badge rounded-pill border border-secondary text-secondary">No credential storage</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-12 col-lg-5">
+          <div class="plaid-panel h-100">
+            <p class="section-title mb-2">Connect</p>
+            <h2 class="h5 mb-3">Link an institution</h2>
+            <div class="form-check mb-3 small">
+              <input class="form-check-input" type="checkbox" id="plaidConsentCheckbox" autocomplete="off">
+              <label class="form-check-label text-secondary" for="plaidConsentCheckbox">
+                I have read the
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" class="link-plaid">Privacy Policy</a>
+                and agree that {{ public_app.app_name }} may collect, process, and store the financial data described there when I connect an account via Plaid.
+              </label>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+              <button type="button" id="linkButton" class="btn btn-plaid-connect btn-sm" disabled>
+                <i class="bi bi-link-45deg me-1"></i>Connect with Plaid
+              </button>
+              <span class="text-secondary small">Private, local import.</span>
+            </div>
+            <p id="plaidLinkStatus" class="plaid-status mb-0" aria-live="polite"></p>
+          </div>
+        </div>
+        <div class="col-12 col-lg-7">
+          <div class="plaid-panel h-100">
+            <p class="section-title mb-2">Connected</p>
+            <h2 class="h5 mb-3">Linked institutions</h2>
+            <p id="plaidLinkedEmpty" class="text-secondary small mb-0">No institutions connected yet.</p>
+            <div id="plaidLinkedTableWrap" class="table-responsive mt-2" style="display: none;">
+              <table class="table table-plaid table-hover table-sm align-middle">
+                <thead>
+                  <tr>
+                    <th>Institution</th>
+                    <th>Institution ID</th>
+                    <th>First linked</th>
+                    <th>Last updated</th>
+                    <th class="text-end">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="plaidLinkedTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/client-error.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/plaid-management.js') }}"></script>
+  </body>
+</html>

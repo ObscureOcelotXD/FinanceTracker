@@ -30,6 +30,59 @@ def test_realized_gain_insert_and_compute(tmp_path):
     assert round(row["realized_gain_pct"], 6) == 0.475
 
 
+def test_delete_plaid_item_data_removes_accounts_transactions_holdings(tmp_path):
+    _init_temp_db(tmp_path)
+    db_manager.insert_items("it-del", "tok")
+    db_manager.update_item_institution("it-del", "Bank", "ins_1")
+    account = SimpleNamespace(
+        account_id="acct-del",
+        name="Checking",
+        official_name=None,
+        type="depository",
+        subtype="checking",
+        balances=SimpleNamespace(current=100.0),
+    )
+    db_manager.store_accounts([account], item_id="it-del")
+    conn = sqlite3.connect(db_manager.DATABASE)
+    conn.execute(
+        """
+        INSERT INTO transactions (transaction_id, account_id, amount, date, name, category)
+        VALUES ('tx1', 'acct-del', 1.0, '2026-01-01', 'Coffee', 'Food')
+        """
+    )
+    conn.commit()
+    conn.close()
+    db_manager.upsert_plaid_holding("acct-del", "AAPL", 1.0, 100.0)
+
+    summary = db_manager.delete_plaid_item_data("it-del")
+    assert summary["items_deleted"] == 1
+    assert summary["accounts_deleted"] == 1
+    assert summary["transactions_deleted"] >= 1
+    assert summary["plaid_holdings_deleted"] >= 1
+
+    conn = sqlite3.connect(db_manager.DATABASE)
+    assert conn.execute("SELECT COUNT(*) FROM items").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM plaid_holdings").fetchone()[0] == 0
+    conn.close()
+
+
+def test_find_plaid_items_matching_institution(tmp_path):
+    _init_temp_db(tmp_path)
+    db_manager.insert_items("a", "t1")
+    db_manager.update_item_institution("a", "Same Bank", "ins_x")
+    db_manager.insert_items("b", "t2")
+    db_manager.update_item_institution("b", "Other", "ins_y")
+
+    m = db_manager.find_plaid_items_matching_institution(
+        institution_id="ins_x",
+        institution_name=None,
+        exclude_item_id="new",
+    )
+    assert [x["item_id"] for x in m] == ["a"]
+
+
 def test_plaid_access_token_encrypted_at_rest_when_key_configured(tmp_path, monkeypatch):
     _init_temp_db(tmp_path)
     from cryptography.fernet import Fernet
@@ -39,7 +92,11 @@ def test_plaid_access_token_encrypted_at_rest_when_key_configured(tmp_path, monk
 
     db_manager.insert_items("item-enc", "secret-access-token")
     items = db_manager.get_items()
-    assert items == [{"item_id": "item-enc", "access_token": "secret-access-token"}]
+    assert len(items) == 1
+    assert items[0]["item_id"] == "item-enc"
+    assert items[0]["access_token"] == "secret-access-token"
+    assert items[0]["first_linked_at_utc"]
+    assert items[0]["updated_at_utc"]
 
     conn = sqlite3.connect(db_manager.DATABASE)
     raw = conn.execute("SELECT access_token FROM items WHERE item_id = ?", ("item-enc",)).fetchone()[
@@ -166,15 +223,23 @@ def test_plaid_helpers_use_configured_database_path(tmp_path, monkeypatch):
     db_manager.insert_transactions([transaction])
 
     items = db_manager.get_items()
-    assert items == [{"item_id": "item-1", "access_token": "token-1"}]
+    assert len(items) == 1
+    assert items[0]["item_id"] == "item-1"
+    assert items[0]["access_token"] == "token-1"
+    assert items[0]["first_linked_at_utc"]
+    assert items[0]["updated_at_utc"]
     assert db_manager.get_institutions() == ["Test Bank"]
 
     conn = sqlite3.connect(custom_db)
     cur = conn.cursor()
     cur.execute("SELECT item_id, institution_name, institution_id FROM items")
     assert cur.fetchone() == ("item-1", "Test Bank", "ins_123")
-    cur.execute("SELECT account_id, item_id FROM accounts")
-    assert cur.fetchone() == ("acct-1", "item-1")
+    cur.execute(
+        "SELECT account_id, item_id, first_seen_at_utc, updated_at_utc FROM accounts"
+    )
+    acct_row = cur.fetchone()
+    assert acct_row[0] == "acct-1" and acct_row[1] == "item-1"
+    assert acct_row[2] and acct_row[3]
     cur.execute("SELECT transaction_id, account_id, name FROM transactions")
     assert cur.fetchone() == ("txn-1", "acct-1", "Coffee Shop")
     conn.close()

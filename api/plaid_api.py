@@ -11,10 +11,13 @@ from plaid.api_client import ApiClient
 from plaid.model.transactions_get_request import TransactionsGetRequest
 from plaid.model.accounts_get_request import AccountsGetRequest
 from plaid.model.investments_holdings_get_request import InvestmentsHoldingsGetRequest
+from plaid.model.item_remove_request import ItemRemoveRequest
 from datetime import datetime, timedelta
 import logging
 import os
 import db_manager
+
+_LOG = logging.getLogger(__name__)
 
 plaid_bp = Blueprint('plaid_api', __name__)
 #region Plaid API Configuration
@@ -102,6 +105,38 @@ client = plaid_api.PlaidApi(api_client)
 # endregion
 
 
+def _plaid_item_remove(access_token: str) -> None:
+    client.item_remove(ItemRemoveRequest(access_token=access_token))
+
+
+def _remove_stale_plaid_items_for_institution(
+    institution_id,
+    institution_name,
+    new_item_id: str,
+) -> list[str]:
+    """
+    When the user links an institution again, Plaid returns a new item_id.
+    Remove prior Items for the same institution locally and at Plaid.
+    """
+    if not institution_id and not institution_name:
+        return []
+    stale = db_manager.find_plaid_items_matching_institution(
+        institution_id=institution_id,
+        institution_name=institution_name,
+        exclude_item_id=new_item_id,
+    )
+    removed_ids: list[str] = []
+    for row in stale:
+        old_id = row["item_id"]
+        try:
+            _plaid_item_remove(row["access_token"])
+        except Exception as exc:
+            _LOG.warning("Plaid item_remove failed for item_id=%s: %s", old_id, exc)
+        db_manager.delete_plaid_item_data(old_id)
+        removed_ids.append(old_id)
+    return removed_ids
+
+
 @plaid_bp.route('/create_link_token', methods=['POST'])
 def create_link_token():
     try:
@@ -153,6 +188,10 @@ def exchange_public_token():
         access_token = exchange_response.access_token
         item_id = exchange_response.item_id
 
+        replaced_ids = _remove_stale_plaid_items_for_institution(
+            institution_id, institution_name, item_id
+        )
+
         db_manager.insert_items(item_id, access_token)
         if institution_name or institution_id:
             db_manager.update_item_institution(item_id, institution_name, institution_id)
@@ -175,7 +214,13 @@ def exchange_public_token():
                 holdings_status = "error"
                 errors.append(f"holdings: {exc}")
 
-        payload = {"item_id": item_id, "status": "linked", "holdings_status": holdings_status}
+        payload = {
+            "item_id": item_id,
+            "status": "linked",
+            "holdings_status": holdings_status,
+            "link_action": "updated" if replaced_ids else "linked",
+            "replaced_item_ids": replaced_ids,
+        }
         if messages:
             payload["messages"] = messages
         if errors:
@@ -233,6 +278,33 @@ def store_investment_holdings(client, access_token):
         db_manager.upsert_plaid_holding(holding.account_id, ticker.upper(), quantity, total_cost_basis)
         imported += 1
     print(f"[Plaid] Holdings import complete. Imported={imported}, Skipped={skipped}")
+
+
+@plaid_bp.route("/plaid/items", methods=["GET"])
+def list_plaid_items():
+    return jsonify({"items": db_manager.list_plaid_items_public()})
+
+
+@plaid_bp.route("/plaid/disconnect", methods=["POST"])
+def disconnect_plaid_item_route():
+    data = request.get_json(silent=True) or {}
+    item_id = (data.get("item_id") or "").strip()
+    if not item_id:
+        return jsonify({"error": "Missing item_id"}), 400
+    row = db_manager.get_plaid_item_by_id(item_id)
+    if not row:
+        return jsonify({"error": "Unknown item_id"}), 404
+    warn = None
+    try:
+        _plaid_item_remove(row["access_token"])
+    except Exception as exc:
+        warn = str(exc)
+        _LOG.warning("Plaid item_remove on disconnect failed item_id=%s: %s", item_id, exc)
+    deleted = db_manager.delete_plaid_item_data(item_id)
+    payload = {"status": "ok", "item_id": item_id, "deleted": deleted}
+    if warn:
+        payload["warning"] = warn
+    return jsonify(payload)
 
 
 @plaid_bp.route('/plaid/import_holdings', methods=['POST'])

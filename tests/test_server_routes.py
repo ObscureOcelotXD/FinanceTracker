@@ -74,6 +74,13 @@ def test_support_returns_200(client):
     assert r.status_code == 200
 
 
+def test_plaid_management_page_returns_200(client):
+    r = client.get("/plaid")
+    assert r.status_code == 200
+    assert b"Plaid Management" in r.data
+    assert b"plaid-management.js" in r.data
+
+
 def test_favicon_returns_204(client):
     r = client.get("/favicon.ico")
     assert r.status_code == 204

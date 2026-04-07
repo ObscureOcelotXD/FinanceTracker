@@ -115,6 +115,8 @@ def test_exchange_public_token_returns_warnings_for_partial_failures(client, mon
     assert response.status_code == 200
     assert payload["status"] == "linked"
     assert payload["item_id"] == "item-123"
+    assert payload.get("link_action") == "linked"
+    assert payload.get("replaced_item_ids") == []
     assert payload["warnings"] == ["transactions: txn down", "holdings: holdings down"]
     assert captured["inserted"] == ("item-123", "access-123")
     assert captured["institution"] == ("item-123", "Test Bank", "ins_123")
@@ -148,9 +150,79 @@ def test_exchange_public_token_skips_nonfatal_investments_consent_errors(client,
     assert payload["status"] == "linked"
     assert payload["holdings_status"] == "skipped"
     assert "warnings" not in payload
+    assert payload.get("link_action") == "linked"
+    assert payload.get("replaced_item_ids") == []
     assert payload["messages"] == [
         "Skipped investment holdings import because this item does not have investment consent or investment accounts."
     ]
+
+
+def test_exchange_public_token_replaces_stale_institution_item(client, monkeypatch):
+    import db_manager
+    import api.plaid_api as plaid_module
+
+    db_manager.insert_items("old-item", "tok-old")
+    db_manager.update_item_institution("old-item", "Test Bank", "ins_123")
+    removed_tokens = []
+
+    def fake_exchange(_request):
+        return SimpleNamespace(access_token="tok-new", item_id="new-item")
+
+    def fake_remove(req):
+        removed_tokens.append(req.access_token)
+
+    monkeypatch.setattr(plaid_module.client, "item_public_token_exchange", fake_exchange)
+    monkeypatch.setattr(plaid_module.client, "item_remove", fake_remove)
+    monkeypatch.setattr(plaid_module, "store_accounts", lambda *_a, **_k: None)
+    monkeypatch.setattr(plaid_module, "store_transactions", lambda *_a, **_k: None)
+    monkeypatch.setattr(plaid_module, "store_investment_holdings", lambda *_a, **_k: None)
+
+    response = client.post(
+        "/exchange_public_token",
+        json={
+            "public_token": "public-123",
+            "institution_name": "Test Bank",
+            "institution_id": "ins_123",
+        },
+    )
+    payload = response.get_json()
+    assert response.status_code == 200
+    assert payload["link_action"] == "updated"
+    assert payload["replaced_item_ids"] == ["old-item"]
+    assert removed_tokens == ["tok-old"]
+    items = db_manager.get_items()
+    assert len(items) == 1
+    assert items[0]["item_id"] == "new-item"
+    assert items[0]["access_token"] == "tok-new"
+
+
+def test_plaid_items_list_empty(client):
+    r = client.get("/plaid/items")
+    assert r.status_code == 200
+    assert r.get_json() == {"items": []}
+
+
+def test_plaid_disconnect_requires_item_id(client):
+    r = client.post("/plaid/disconnect", json={})
+    assert r.status_code == 400
+
+
+def test_plaid_disconnect_unknown_item(client):
+    r = client.post("/plaid/disconnect", json={"item_id": "missing"})
+    assert r.status_code == 404
+
+
+def test_plaid_disconnect_removes_item(client, monkeypatch):
+    import db_manager
+    import api.plaid_api as plaid_module
+
+    db_manager.insert_items("item-x", "tok-x")
+    monkeypatch.setattr(plaid_module.client, "item_remove", lambda _req: None)
+    r = client.post("/plaid/disconnect", json={"item_id": "item-x"})
+    assert r.status_code == 200
+    assert r.get_json()["status"] == "ok"
+    assert db_manager.get_items() == []
+    assert client.get("/plaid/items").get_json() == {"items": []}
 
 
 def test_import_holdings_requires_linked_items(client, monkeypatch):
