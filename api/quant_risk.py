@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 import pandas as pd
 import requests
 
-import db_manager
+from services import db_manager
 
 
 def fetch_yahoo_history(symbol: str, start_date: dt.datetime, end_date: dt.datetime):

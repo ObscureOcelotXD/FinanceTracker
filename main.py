@@ -1,5 +1,5 @@
 from runServer import flask_app
-import db_manager
+from services import db_manager
 import atexit
 import os
 import subprocess
@@ -38,7 +38,7 @@ if __name__ == '__main__':
             return proc
 
         backtest_proc = start_streamlit_app("streamlit_backtest.py", "8501")
-        filings_proc = start_streamlit_app("filings.py", "8502")
+        filings_proc = start_streamlit_app("services/filings.py", "8502")
         if backtest_proc:
             atexit.register(lambda: backtest_proc.terminate())
         if filings_proc:

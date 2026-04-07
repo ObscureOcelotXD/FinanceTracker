@@ -188,7 +188,7 @@ def _gather_news_rows_for_insights() -> list[dict[str, Any]]:
     Prefer articles tagged to portfolio tickers (one query per symbol), then fill with
     recent general articles. De-duplicates by URL.
     """
-    import db_manager
+    from services import db_manager
     from api.news_digest import portfolio_ticker_universe
 
     lim = _limits()
@@ -239,7 +239,7 @@ def _gather_news_rows_for_insights() -> list[dict[str, Any]]:
 
 def _build_context() -> tuple[str, list[dict[str, Any]]]:
     """Returns (user_prompt, catalog) where catalog maps index labels to metadata for UI."""
-    import db_manager
+    from services import db_manager
     from api.news_digest import portfolio_ticker_universe
 
     lim = _limits()
@@ -372,7 +372,7 @@ def generate_and_store_home_insights() -> bool:
     """
     Pull latest news + SEC summaries, call Groq, persist cache. Returns True on success.
     """
-    import db_manager
+    from services import db_manager
 
     if not _enabled():
         return False
@@ -427,7 +427,7 @@ def generate_and_store_home_insights() -> bool:
 
 def get_home_insights_payload() -> dict[str, Any]:
     """API shape for GET /api/home_insights."""
-    import db_manager
+    from services import db_manager
 
     if not _enabled():
         return {

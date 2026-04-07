@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import api.news_digest as nd
-import db_manager
+from services import db_manager
 
 
 SAMPLE_RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
@@ -104,7 +104,7 @@ def test_rss_entry_combined_plain_text_includes_atom_content():
 
 def test_fill_snippets_prioritizes_priority_urls_before_others(monkeypatch):
     """DB-null-summary URLs are fetched first when passed as priority_urls."""
-    import db_manager as dm
+    from services import db_manager as dm
 
     calls: list[str] = []
 

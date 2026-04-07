@@ -1,6 +1,6 @@
 import plotly.express as px
 from dash import Input, Output
-import db_manager
+from services import db_manager
 from dashApp import dash_app  # Import the dash_app instance from dashapp.py
 
 @dash_app.callback(

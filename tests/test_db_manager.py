@@ -2,7 +2,7 @@ import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
-import db_manager
+from services import db_manager
 
 
 def _init_temp_db(tmp_path: Path):

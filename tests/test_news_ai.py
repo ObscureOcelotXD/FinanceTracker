@@ -5,7 +5,7 @@ import sqlite3
 from unittest.mock import MagicMock
 
 import api.news_ai as news_ai
-import db_manager
+from services import db_manager
 
 
 def test_normalize_relevance_filters_to_universe():

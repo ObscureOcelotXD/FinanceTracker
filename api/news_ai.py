@@ -170,7 +170,7 @@ def run_news_ai_relevance_batch() -> int:
         return 0
 
     from api.news_digest import portfolio_ticker_universe
-    import db_manager
+    from services import db_manager
 
     universe, stats = portfolio_ticker_universe()
     if not universe or stats.get("unique_for_matching", 0) == 0:

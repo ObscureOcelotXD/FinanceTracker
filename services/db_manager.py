@@ -1019,7 +1019,7 @@ def prune_sec_filing_summaries(retention_days: Optional[int] = None) -> int:
 
     Default comes from env ``SEC_FILING_SUMMARY_RETENTION_DAYS`` (default **365**).
     Set to ``0`` to disable automatic pruning. Summaries are kept longer than raw
-    downloaded filing files (see ``SEC_FILINGS_RETENTION_DAYS`` in ``filings.py``).
+    downloaded filing files (see ``SEC_FILINGS_RETENTION_DAYS`` in ``services/filings.py``).
     """
     if retention_days is None:
         raw = (os.getenv("SEC_FILING_SUMMARY_RETENTION_DAYS") or "365").strip()

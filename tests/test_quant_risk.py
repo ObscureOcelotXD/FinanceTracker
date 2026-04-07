@@ -5,7 +5,7 @@ import pytest
 
 
 def _init_temp_db(tmp_path):
-    import db_manager
+    from services import db_manager
     db_manager.DATABASE = str(tmp_path / "test_finance_data.db")
     db_manager.init_db()
     return db_manager.DATABASE

@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import api.alpha_api as av
-import db_manager
+from services import db_manager
 from api.quant_risk import compute_risk_summary
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))

@@ -15,7 +15,7 @@ from plaid.model.item_remove_request import ItemRemoveRequest
 from datetime import datetime, timedelta
 import logging
 import os
-import db_manager
+from services import db_manager
 
 _LOG = logging.getLogger(__name__)
 

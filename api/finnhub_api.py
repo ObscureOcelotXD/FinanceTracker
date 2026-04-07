@@ -9,28 +9,15 @@ try:
     from . import polygon_api
 except Exception:
     import polygon_api
-try:
-    # When running from the project root.
-    from db_manager import (
-        get_all_tickers,
-        upsert_stock_price,
-        get_last_update,
-        set_last_update,
-        get_sector_map,
-        get_sector_records,
-        upsert_stock_sector,
-    )
-except ModuleNotFoundError:
-    # When the package is imported as a module (e.g., api.finnhub_api).
-    from ..db_manager import (
-        get_all_tickers,
-        upsert_stock_price,
-        get_last_update,
-        set_last_update,
-        get_sector_map,
-        get_sector_records,
-        upsert_stock_sector,
-    )
+from services.db_manager import (
+    get_all_tickers,
+    upsert_stock_price,
+    get_last_update,
+    set_last_update,
+    get_sector_map,
+    get_sector_records,
+    upsert_stock_sector,
+)
 
 finnhub_api = Blueprint("finnhub_api", __name__)
 

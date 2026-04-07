@@ -13,7 +13,7 @@ if str(_ROOT) not in sys.path:
 
 load_dotenv()
 
-import db_manager
+from services import db_manager
 
 FINNHUB_CANDLE_URL = "https://finnhub.io/api/v1/stock/candle"
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"

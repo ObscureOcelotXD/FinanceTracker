@@ -1,7 +1,7 @@
 import dash
 from dash import html, dcc
 import plotly.express as px
-import db_manager
+from services import db_manager
 
 # Register this page. When the user visits /accounts_dash the following layout will be shown.
 dash.register_page(

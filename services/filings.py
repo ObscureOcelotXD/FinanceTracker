@@ -27,7 +27,7 @@ from google import genai
 import pyrate_limiter
 import requests
 
-import db_manager
+from services import db_manager
 
 _LOG = logging.getLogger(__name__)
 

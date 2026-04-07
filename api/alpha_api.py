@@ -3,22 +3,12 @@ import os
 import requests
 import datetime
 from dotenv import load_dotenv
-try:
-    # When running from the project root.
-    from db_manager import (
-        get_all_tickers,
-        upsert_stock_price,
-        set_last_update,
-        get_last_update,
-    )
-except ModuleNotFoundError:
-    # When the package is imported as a module (e.g., api.alpha_api).
-    from ..db_manager import (
-        get_all_tickers,
-        upsert_stock_price,
-        set_last_update,
-        get_last_update,
-    )
+from services.db_manager import (
+    get_all_tickers,
+    upsert_stock_price,
+    set_last_update,
+    get_last_update,
+)
 
 alpha_api = Blueprint("alpha_api", __name__)
 

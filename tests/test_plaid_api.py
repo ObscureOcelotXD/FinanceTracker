@@ -9,7 +9,7 @@ def _enum_values(values):
 
 @pytest.fixture
 def temp_db(tmp_path):
-    import db_manager
+    from services import db_manager
 
     db_manager.DATABASE = str(tmp_path / "test_finance_data.db")
     db_manager.init_db()
@@ -158,7 +158,7 @@ def test_exchange_public_token_skips_nonfatal_investments_consent_errors(client,
 
 
 def test_exchange_public_token_replaces_stale_institution_item(client, monkeypatch):
-    import db_manager
+    from services import db_manager
     import api.plaid_api as plaid_module
 
     db_manager.insert_items("old-item", "tok-old")
@@ -213,7 +213,7 @@ def test_plaid_disconnect_unknown_item(client):
 
 
 def test_plaid_disconnect_removes_item(client, monkeypatch):
-    import db_manager
+    from services import db_manager
     import api.plaid_api as plaid_module
 
     db_manager.insert_items("item-x", "tok-x")

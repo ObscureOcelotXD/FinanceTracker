@@ -6,7 +6,7 @@ import pytest
 @pytest.fixture
 def temp_db(tmp_path):
     """Point db_manager at a temp DB and init it before server is imported."""
-    import db_manager
+    from services import db_manager
     db_manager.DATABASE = str(tmp_path / "test_finance_data.db")
     db_manager.init_db()
     return db_manager.DATABASE
@@ -226,7 +226,7 @@ def test_client_error_endpoint_disabled_by_default(client, monkeypatch):
 def test_client_error_endpoint_stores_when_enabled(client, monkeypatch, temp_db):
     import sqlite3
 
-    import db_manager
+    from services import db_manager
 
     monkeypatch.setenv("ENABLE_CLIENT_ERROR_LOG", "1")
     r = client.post(
@@ -246,7 +246,7 @@ def test_client_error_endpoint_stores_when_enabled(client, monkeypatch, temp_db)
 def test_server_unhandled_exception_logged_when_enabled(temp_db, monkeypatch):
     import sqlite3
 
-    import db_manager
+    from services import db_manager
 
     monkeypatch.setenv("NEWS_DIGEST_DISABLE_SCHEDULER", "1")
     monkeypatch.setenv("ENABLE_SERVER_ERROR_LOG", "1")

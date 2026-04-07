@@ -10,7 +10,7 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
-from quant_backtest import (
+from quant.quant_backtest import (
     SAMPLE_PORTFOLIO,
     run_backtest,
 )

@@ -71,7 +71,7 @@ def portfolio_ticker_universe() -> tuple[dict[str, str], dict[str, int]]:
         stats: manual_distinct, plaid_distinct, unique_for_matching.
     """
     try:
-        import db_manager
+        from services import db_manager
 
         manual = set(db_manager.get_held_stock_tickers())
         plaid = set(db_manager.get_plaid_holdings_tickers())
@@ -148,7 +148,7 @@ def _max_article_snippet_fetches_per_digest() -> int:
 
 def _snippet_fetch_priority_urls_from_db(items: list[dict[str, Any]]) -> set[str]:
     """Canonical URLs in ``items`` that already exist in the DB with NULL/empty ``summary``."""
-    import db_manager
+    from services import db_manager
 
     canon: list[str] = []
     for it in items:
@@ -177,7 +177,7 @@ def _fill_article_snippets_for_items(
     """
     if max_fetches <= 0 or not _article_snippet_fetch_enabled():
         return
-    import db_manager
+    from services import db_manager
 
     need: list[dict[str, Any]] = []
     for it in items:
@@ -693,7 +693,7 @@ def retag_stored_articles_for_local_date(local_date: str) -> int:
     ``local_date`` (``YYYY-MM-DD`` in ``NEWS_DIGEST_TZ``). Updates ``tickers_json`` /
     ``ticker_companies_json`` when mentions match the **current** holdings universe.
     """
-    import db_manager
+    from services import db_manager
 
     universe, _ = portfolio_ticker_universe()
     rows = db_manager.list_news_digest_articles_for_local_date(local_date)
@@ -736,7 +736,7 @@ def _backfill_null_summaries_after_digest(budget: int | None = None) -> int:
     """
     if not _article_snippet_fetch_enabled():
         return 0
-    import db_manager
+    from services import db_manager
 
     max_fetches = budget if budget is not None else _max_article_snippet_fetches_per_digest()
     rows = db_manager.recent_news_digest_articles_with_null_summary(days=2)
@@ -766,7 +766,7 @@ def write_outputs(digest: dict[str, Any], out_dir: Path | None = None) -> tuple[
     json_path.write_text(json.dumps(digest, indent=2, ensure_ascii=False), encoding="utf-8")
     md_path.write_text(render_markdown(digest), encoding="utf-8")
     try:
-        import db_manager
+        from services import db_manager
 
         n = db_manager.upsert_news_digest_articles_from_digest(digest)
         _LOG.info("news_digest_articles: upserted %d row(s)", n)

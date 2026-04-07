@@ -6,7 +6,7 @@ from io import StringIO
 import pandas as pd
 import requests
 
-import db_manager
+from services import db_manager
 from api import polygon_api
 
 DEFAULT_ETF_SOURCES = {

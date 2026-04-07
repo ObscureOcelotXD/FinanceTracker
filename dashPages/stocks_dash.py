@@ -4,7 +4,7 @@ from dash import html, dcc, Input, Output, State, get_app
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import pandas as pd
-import db_manager
+from services import db_manager
 from api import finnhub_api
 
 # Register page

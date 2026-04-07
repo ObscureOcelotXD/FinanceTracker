@@ -35,13 +35,13 @@ Secrets are loaded from the **environment** only (`os.getenv`). No Infisical SDK
 - **`main.py`** – Entry point: DB init, optional Streamlit (backtest, filings), Dash, then Flask on 5000.
 - **`runServer.py`** – Builds the Flask app via `server.create_flask_app()` (used by `main.py` and for gunicorn).
 - **`server.py`** – Flask app factory: routes (/, /quant, /filings, /webhook, /oauth/callback, /admin/*, /quant/risk_summary), blueprint registration. Single app; no duplicate global app.
-- **`db_manager.py`** – SQLite schema and CRUD (stocks, accounts, Plaid items, transactions, holdings, SEC summaries, etc.).
+- **`services/`** – **`services/db_manager.py`**: SQLite schema and CRUD (stocks, accounts, Plaid items, transactions, holdings, SEC summaries, etc.). **`services/filings.py`**: Streamlit SEC filings tool (port 8502).
+- **`quant/`** – **`quant/quant_backtest.py`**: backtesting helpers (used by `streamlit_backtest.py`).
 - **`dashApp.py`** – Dash app mounted at `/dashboard/`; **`dash_callbacks.py`** – Dash callbacks.
 - **`dashPages/`** – Dash pages (stocks, accounts, realized gains, manage).
 - **`api/`** – Flask blueprints and helpers: Plaid, Alpha Vantage, Finnhub, CoinGecko, Umbrel, BTC wallet, etc. **`api/quant_risk.py`** – Quant risk summary logic (used by `/quant/risk_summary`).
 - **`docs/INFISICAL.md`** – Infisical CLI setup and secret names (no SDK; use `infisical run -- ./start.sh` or `make run-infisical`).
 - **`templates/`**, **`static/`** – Jinja HTML and static assets.
-- **`handlers/`**, **`ui_main_window.py`**, **`csv_utils.py`** – Desktop (PySide6/Qt) UI; separate from the web app.
 - **`scripts/`** – Backfill and one-off scripts.
 - **`tests/`** – Pytest tests (db_manager, btc_wallet, finnhub_sector_cache, server routes, quant_risk).
 

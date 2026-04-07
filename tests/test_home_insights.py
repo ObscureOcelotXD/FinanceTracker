@@ -4,7 +4,7 @@ import json
 from unittest.mock import MagicMock
 
 import api.home_insights as hi
-import db_manager
+from services import db_manager
 
 
 def test_normalize_sources_merges_labels():

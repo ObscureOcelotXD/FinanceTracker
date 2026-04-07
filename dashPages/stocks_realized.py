@@ -3,7 +3,7 @@ import dash
 from dash import html, dcc, ctx
 from dash.dash_table import DataTable, FormatTemplate
 import dash_bootstrap_components as dbc
-import db_manager
+from services import db_manager
 import pandas as pd
 from datetime import datetime
 from dash.dependencies import Output, Input, State
