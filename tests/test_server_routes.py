@@ -29,8 +29,16 @@ def test_index_returns_200(client):
     assert b"Privacy Mode" in r.data
     assert b'privacyModeSelect' in r.data
     assert b"Today's news" in r.data
-    assert b"Coming soon" in r.data
+    assert b"Refresh insights" in r.data
     assert b"View all news" in r.data
+
+
+def test_api_home_insights_returns_json(client):
+    r = client.get("/api/home_insights")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert "enabled" in data
+    assert isinstance(data.get("sources"), list)
 
 
 def test_news_page_returns_200(client):

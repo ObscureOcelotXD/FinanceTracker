@@ -49,6 +49,14 @@
             .neon-panel.neon-purple .news-card-icon {
             color: #c084fc;
             }
+            .neon-panel.neon-purple .home-insights-sources summary {
+            cursor: pointer;
+            color: rgba(196, 181, 253, 0.95);
+            }
+            .neon-panel.neon-purple .home-insights-body {
+            font-size: 0.95rem;
+            line-height: 1.5;
+            }
             .neon-panel.neon-slate {
             background: linear-gradient(135deg, rgba(148,163,184,0.16), rgba(15,23,42,1));
             border-color: rgba(148,163,184,0.28);

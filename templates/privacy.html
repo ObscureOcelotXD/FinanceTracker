@@ -17,8 +17,22 @@
 
       <div class="card bg-dark border-secondary mb-3">
         <div class="card-body">
+          <h2 class="h5">Policy location</h2>
+          <p class="mb-0">This policy applies to the web application at <a href="{{ public_app.app_url }}/">{{ public_app.app_url }}</a> where Plaid Link is presented.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
           <h2 class="h5">Data we collect</h2>
           <p class="mb-0">When you connect an account through Plaid, {{ public_app.app_name }} may receive read-only account, balance, transaction history, and investment holdings data needed to power dashboards, analytics, and holdings views.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">Your consent</h2>
+          <p class="mb-0">Before connecting an institution via Plaid Link, you are asked to acknowledge this Privacy Policy. By checking that box and completing Plaid Link, you consent to the collection, processing, and local storage of the categories of data described here, solely to operate the features you use.</p>
         </div>
       </div>
 
@@ -32,14 +46,21 @@
       <div class="card bg-dark border-secondary mb-3">
         <div class="card-body">
           <h2 class="h5">Credentials and tokens</h2>
-          <p class="mb-0">Bank credentials are handled by Plaid Link and are not stored by {{ public_app.app_name }}. Plaid access tokens are stored server-side and are not exposed client-side.</p>
+          <p class="mb-0">Bank credentials are handled by Plaid Link and are not stored by {{ public_app.app_name }}. Plaid access tokens are stored server-side only, never sent to the browser. Where supported by deployment configuration, those tokens may be encrypted at rest on disk.</p>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h2 class="h5">Security (transport)</h2>
+          <p class="mb-0">Production deployments should serve this application over HTTPS (TLS 1.2 or newer) so data between your browser and the server is encrypted in transit. Local development may use plain HTTP on localhost only.</p>
         </div>
       </div>
 
       <div class="card bg-dark border-secondary mb-3">
         <div class="card-body">
           <h2 class="h5">Retention and deletion</h2>
-          <p class="mb-0">Users may disconnect linked institutions. Linked items and locally stored financial data can be removed when no longer needed or on request.</p>
+          <p class="mb-0">Financial data and linked-institution metadata are kept only as long as needed to provide the product. You may disconnect linked institutions from within the app where supported. A full local data wipe may be available for operator-controlled installs. This policy is reviewed and updated when data practices change or applicable privacy expectations evolve.</p>
         </div>
       </div>
 
@@ -50,6 +71,9 @@
           <p class="mb-0">Questions about this policy can be sent to <a href="{{ public_app.support_mailto }}">{{ public_app.support_email }}</a>.</p>
           {% else %}
           <p class="mb-0">Set <code>PUBLIC_SUPPORT_EMAIL</code> in <code>.env</code> to publish a support contact here before sharing this page externally.</p>
+          {% endif %}
+          {% if public_app.security_email %}
+          <p class="mb-0 mt-2">Security-related inquiries: <a href="{{ public_app.security_mailto }}">{{ public_app.security_email }}</a>.</p>
           {% endif %}
         </div>
       </div>

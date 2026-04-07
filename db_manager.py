@@ -12,6 +12,39 @@ import pandas as pd
 import re
 DATABASE = "finance_data.db"
 
+
+def _plaid_token_encryption_key_raw() -> Optional[str]:
+    raw = (os.getenv("PLAID_TOKEN_ENCRYPTION_KEY") or "").strip()
+    return raw or None
+
+
+def _encrypt_plaid_access_token_at_rest(plain: str) -> str:
+    """When ``PLAID_TOKEN_ENCRYPTION_KEY`` is set (Fernet urlsafe base64), store ciphertext in SQLite."""
+    key_raw = _plaid_token_encryption_key_raw()
+    if not key_raw or not plain:
+        return plain
+    from cryptography.fernet import Fernet
+
+    f = Fernet(key_raw.encode("utf-8"))
+    return f.encrypt(plain.encode("utf-8")).decode("utf-8")
+
+
+def _decrypt_plaid_access_token_at_rest(stored: str) -> str:
+    if not stored:
+        return stored
+    key_raw = _plaid_token_encryption_key_raw()
+    if not key_raw:
+        return stored
+    from cryptography.fernet import Fernet, InvalidToken
+
+    f = Fernet(key_raw.encode("utf-8"))
+    try:
+        return f.decrypt(stored.encode("utf-8")).decode("utf-8")
+    except InvalidToken:
+        # Legacy rows written before encryption was enabled remain readable as plaintext.
+        return stored
+
+
 def get_connection():
     return sqlite3.connect(DATABASE)
 
@@ -300,6 +333,10 @@ def init_db():
     if "summary" not in _nda_cols:
         # TODO: populate from LLM or paid API when summaries are implemented.
         cur15.execute("ALTER TABLE news_digest_articles ADD COLUMN summary TEXT")
+    if "ai_relevance_json" not in _nda_cols:
+        cur15.execute("ALTER TABLE news_digest_articles ADD COLUMN ai_relevance_json TEXT")
+    if "ai_processed_at_utc" not in _nda_cols:
+        cur15.execute("ALTER TABLE news_digest_articles ADD COLUMN ai_processed_at_utc TEXT")
     # Drop legacy created_at_utc if present (SQLite 3.35+).
     if "created_at_utc" in _nda_cols:
         try:
@@ -314,6 +351,18 @@ def init_db():
     cur15.execute("""
         CREATE INDEX IF NOT EXISTS idx_news_digest_articles_first_seen
         ON news_digest_articles (first_seen_at_utc DESC)
+    """)
+
+    cur16 = con.cursor()
+    cur16.execute("""
+        CREATE TABLE IF NOT EXISTS home_insights_cache (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            insight_text TEXT,
+            sources_json TEXT NOT NULL DEFAULT '[]',
+            generated_at_utc TEXT,
+            model TEXT,
+            error_text TEXT
+        )
     """)
 
     con.commit()
@@ -474,7 +523,7 @@ def insert_items(item_id, access_token):
         c.execute("ALTER TABLE items ADD COLUMN institution_id TEXT")
     c.execute(
         "INSERT OR REPLACE INTO items (item_id, access_token) VALUES (?, ?)",
-        (item_id, access_token),
+        (item_id, _encrypt_plaid_access_token_at_rest(access_token)),
     )
     conn.commit()
     conn.close()
@@ -513,7 +562,10 @@ def get_items():
     c.execute("SELECT item_id, access_token FROM items")
     rows = c.fetchall()
     conn.close()
-    return [{"item_id": row[0], "access_token": row[1]} for row in rows]
+    return [
+        {"item_id": row[0], "access_token": _decrypt_plaid_access_token_at_rest(row[1])}
+        for row in rows
+    ]
 
 def store_accounts(accounts, item_id=None):
     conn = get_connection()
@@ -646,6 +698,7 @@ def wipe_all_data(force: bool = False):
     _safe_delete("sec_filing_summaries")
     _safe_delete("client_error_log")
     _safe_delete("news_digest_articles")
+    _safe_delete("home_insights_cache")
     conn.commit()
     conn.close()
 
@@ -784,6 +837,100 @@ def delete_sec_summaries(ticker: Optional[str] = None, filing_type: Optional[str
         params.append(filing_type)
     where_clause = f"WHERE {' AND '.join(where)}" if where else ""
     cur.execute(f"DELETE FROM sec_filing_summaries {where_clause}", params)
+    conn.commit()
+    conn.close()
+
+
+def prune_sec_filing_summaries(retention_days: Optional[int] = None) -> int:
+    """
+    Delete summary rows whose ``created_at`` is older than ``retention_days`` (UTC).
+
+    Default comes from env ``SEC_FILING_SUMMARY_RETENTION_DAYS`` (default **365**).
+    Set to ``0`` to disable automatic pruning. Summaries are kept longer than raw
+    downloaded filing files (see ``SEC_FILINGS_RETENTION_DAYS`` in ``filings.py``).
+    """
+    if retention_days is None:
+        raw = (os.getenv("SEC_FILING_SUMMARY_RETENTION_DAYS") or "365").strip()
+        try:
+            retention_days = int(raw)
+        except ValueError:
+            retention_days = 365
+    if retention_days <= 0:
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    cutoff_s = cutoff.isoformat()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        DELETE FROM sec_filing_summaries
+        WHERE created_at IS NOT NULL AND created_at < ?
+        """,
+        (cutoff_s,),
+    )
+    deleted = cur.rowcount if cur.rowcount is not None else 0
+    conn.commit()
+    conn.close()
+    return int(deleted)
+
+
+def get_home_insights() -> Optional[dict[str, Any]]:
+    """Single-row cache for Groq cross-insights on the home page."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT insight_text, sources_json, generated_at_utc, model, error_text
+        FROM home_insights_cache WHERE id = 1
+        """
+    )
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    try:
+        sources = json.loads(row[1] or "[]")
+    except json.JSONDecodeError:
+        sources = []
+    if not isinstance(sources, list):
+        sources = []
+    return {
+        "insight_text": row[0],
+        "sources": sources,
+        "generated_at_utc": row[2],
+        "model": row[3],
+        "error_text": row[4],
+    }
+
+
+def upsert_home_insights(
+    insight_text: Optional[str],
+    sources: list[dict[str, Any]],
+    model: str,
+    error_text: Optional[str] = None,
+) -> None:
+    conn = get_connection()
+    cur = conn.cursor()
+    now = datetime.now(timezone.utc).isoformat()
+    cur.execute(
+        """
+        INSERT INTO home_insights_cache (id, insight_text, sources_json, generated_at_utc, model, error_text)
+        VALUES (1, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            insight_text = excluded.insight_text,
+            sources_json = excluded.sources_json,
+            generated_at_utc = excluded.generated_at_utc,
+            model = excluded.model,
+            error_text = excluded.error_text
+        """,
+        (
+            insight_text,
+            json.dumps(sources, ensure_ascii=False),
+            now,
+            (model or "")[:120],
+            error_text,
+        ),
+    )
     conn.commit()
     conn.close()
 
@@ -1050,6 +1197,58 @@ def update_news_digest_article_summary(url: str, summary: str) -> bool:
     return bool(changed)
 
 
+def list_news_digest_articles_pending_ai(
+    days: int = 2,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """
+    Recent articles that have not yet been processed by the holdings-relevance LLM.
+    Returns rows with ``url``, ``title``, ``summary`` (may be null).
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    lim = max(1, min(int(limit), 50))
+    cur.execute(
+        """
+        SELECT url, title, summary FROM news_digest_articles
+        WHERE (ai_processed_at_utc IS NULL OR TRIM(ai_processed_at_utc) = '')
+          AND first_seen_at_utc >= ?
+        ORDER BY first_seen_at_utc DESC
+        LIMIT ?
+        """,
+        (cutoff, lim),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [
+        {"url": r[0], "title": r[1], "summary": r[2]}
+        for r in rows
+    ]
+
+
+def update_news_digest_article_ai_relevance(
+    url: str,
+    relevance: dict[str, Any],
+    processed_at_utc: str,
+) -> bool:
+    """Persist Groq (or other) holdings-relevance JSON and processing timestamp."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE news_digest_articles
+        SET ai_relevance_json = ?, ai_processed_at_utc = ?
+        WHERE url = ?
+        """,
+        (json.dumps(relevance, ensure_ascii=False), processed_at_utc, url),
+    )
+    changed = cur.rowcount if cur.rowcount is not None else 0
+    conn.commit()
+    conn.close()
+    return bool(changed)
+
+
 def prune_news_digest_articles(retention_days: Optional[int] = None) -> int:
     """
     Delete rows whose ``first_seen_at_utc`` is older than ``retention_days`` (default 90, UTC).
@@ -1111,6 +1310,14 @@ def _news_digest_item_dict_from_row(r: tuple[Any, ...]) -> dict[str, Any]:
     cats = json.loads(r[3] or "[]")
     syms = json.loads(r[4] or "[]")
     tc = json.loads(r[5] or "{}")
+    ai_rel: Optional[dict[str, Any]] = None
+    if len(r) > 9 and r[9]:
+        try:
+            parsed = json.loads(r[9])
+            if isinstance(parsed, dict):
+                ai_rel = parsed
+        except json.JSONDecodeError:
+            ai_rel = None
     return {
         "url": url,
         "title": r[1],
@@ -1122,6 +1329,8 @@ def _news_digest_item_dict_from_row(r: tuple[Any, ...]) -> dict[str, Any]:
         "first_seen_at_utc": r[6],
         "last_seen_at_utc": r[7],
         "summary": r[8],
+        "ai_relevance": ai_rel,
+        "ai_processed_at_utc": (r[10] if len(r) > 10 else None) or None,
     }
 
 
@@ -1186,7 +1395,7 @@ def list_news_digest_articles_for_local_date(local_date: str) -> list[dict[str, 
     cur.execute(
         """
         SELECT url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
-               first_seen_at_utc, last_seen_at_utc, summary
+               first_seen_at_utc, last_seen_at_utc, summary, ai_relevance_json, ai_processed_at_utc
         FROM news_digest_articles
         WHERE first_seen_at_utc >= ? AND first_seen_at_utc < ?
         ORDER BY first_seen_at_utc DESC
@@ -1245,7 +1454,7 @@ def list_news_digest_articles(
     cur.execute(
         f"""
         SELECT url, title, source_feed, categories_json, tickers_json, ticker_companies_json,
-               first_seen_at_utc, last_seen_at_utc, summary
+               first_seen_at_utc, last_seen_at_utc, summary, ai_relevance_json, ai_processed_at_utc
         FROM news_digest_articles
         {where_sql}
         {order_sql}

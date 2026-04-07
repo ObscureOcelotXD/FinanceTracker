@@ -55,19 +55,42 @@ The app now reads `PLAID_PRODUCTS` and `PLAID_COUNTRY_CODES` from the environmen
 
 ## 4. Security Questionnaire Prep
 
-Answer conservatively and truthfully. Plaid is generally looking for a credible baseline, not enterprise theater.
+Answer to match what you **actually** deploy. After the improvements in this repo, you can truthfully claim (when configured): published privacy policy, explicit consent before Plaid Link, HTTPS in production, optional encryption of Plaid access tokens at rest.
 
-Suggested answer themes:
+### Question-by-question (honest templates—edit for your org)
 
-- End-user data is stored server-side, not in the browser.
-- Plaid access tokens are not exposed client-side.
-- Secrets are managed through environment variables or Infisical CLI injection.
-- Access to production credentials is limited to authorized development use.
-- Data is transmitted over HTTPS in production.
-- Users can disconnect accounts and linked items can be removed when no longer needed.
-- The product uses financial data only for user-requested personal finance features and does not sell or rent user data.
-- The product is read-only and is not used for money movement, payment initiation, account funding, or execution of trades.
-- The current production request is for my own connected accounts while the product is being built and validated with real data.
+**1 — Security contact**  
+Provide your name, title, and email, or a monitored group alias (e.g. `PUBLIC_SECURITY_EMAIL` / `PUBLIC_SUPPORT_EMAIL` shown on `/privacy`).
+
+**2 — Documented security policy/program**  
+If you select **No**, a typical honest explanation: *the project is operated by [individual / small team]; we follow sensible practices (secrets in env, no credentials in git, least-privilege server access) but we do not yet maintain a formal written ISMS or ISO-style policy set. We are committed to addressing gaps Plaid identifies.*
+
+**3 — Access controls to production / sensitive data**  
+If checklist options do not fit, explain in free text: *production host and Plaid credentials limited to the operator; SSH or provider console access; secrets via environment variables / secret manager; database and backups not world-readable; no shared production passwords in chat.*
+
+**4 — MFA for consumers before Link**  
+If **No**: *the app is currently single-user / low-scale [or personal-use-first]; login MFA is on the roadmap [or: not applicable for localhost-only deployment]. Plaid Link itself enforces the financial institution’s authentication including MFA when the bank requires it.*
+
+**5 — MFA for critical systems storing consumer data**  
+If **No** for your **own** admin access: be honest—*operator access to the production server may be password + SSH key only; we will enable MFA on hosting/provider and admin consoles where available.* If you **do** use MFA on cloud console + SSH keys, say so.
+
+**6 — TLS 1.2+ in transit**  
+Select **Yes** for production only if users reach the app over **HTTPS** (reverse proxy or PaaS). Enable `TRUST_PROXY_HEADERS=1` and `PUBLIC_REQUIRE_HTTPS=1` behind a TLS terminator. Local `http://127.0.0.1` is development-only.
+
+**7 — Encrypt Plaid consumer data at rest**  
+Plaid **access tokens** can be encrypted in SQLite when `PLAID_TOKEN_ENCRYPTION_KEY` is set (Fernet). Transaction/holding rows are still ordinary DB fields—note *full-disk encryption on the server* if applicable. If not fully encrypted, answer partially and describe what **is** protected.
+
+**8 — Vulnerability scans**  
+Be accurate: e.g. *dependabot or manual dependency updates; periodic `pip list` / OS patches; no dedicated enterprise VM scanning.* Plaid often accepts honest small-team answers.
+
+**9 — Privacy policy**  
+If **Yes**, give your live URL: `{PUBLIC_APP_URL}/privacy` (and the static `docs/` mirror if you use GitHub Pages).
+
+**10 — Consent**  
+The home page requires acknowledging the Privacy Policy before **Connect Plaid** is enabled—describe that and Link’s own disclosures.
+
+**11 — Data deletion / retention**  
+Point to the Privacy Policy retention section and app features (disconnect / wipe where implemented). Note you review the policy when practices change; align with any jurisdiction you target (e.g. CPRA if California users).
 
 ## 5. Submission Package
 

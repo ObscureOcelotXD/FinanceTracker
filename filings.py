@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import importlib.metadata
+import logging
 import os
 import re
 import time
@@ -27,6 +28,8 @@ import pyrate_limiter
 import requests
 
 import db_manager
+
+_LOG = logging.getLogger(__name__)
 
 
 def _patch_pyrate_limiter() -> None:
@@ -72,6 +75,8 @@ MAX_FILINGS_PER_TYPE = 1
 DOWNLOAD_PAUSE_SECONDS = 0.25
 SEC_MIN_INTERVAL_SECONDS = 0.2
 SEC_FILINGS_RETENTION_DAYS = 30
+# Cached LLM summaries in DB (sec_filing_summaries); separate from raw file retention above.
+SEC_FILING_SUMMARY_RETENTION_DAYS = 365
 
 
 DISCLAIMER = (
@@ -217,6 +222,20 @@ def _prune_old_filings(base_dir: Path) -> None:
                 path.rmdir()
             except OSError:
                 pass
+
+
+def _prune_sec_summary_rows() -> None:
+    """Drop DB rows older than SEC_FILING_SUMMARY_RETENTION_DAYS (env override)."""
+    raw = os.getenv("SEC_FILING_SUMMARY_RETENTION_DAYS")
+    try:
+        days = int(raw) if raw else SEC_FILING_SUMMARY_RETENTION_DAYS
+    except ValueError:
+        days = SEC_FILING_SUMMARY_RETENTION_DAYS
+    if days <= 0:
+        return
+    n = db_manager.prune_sec_filing_summaries(retention_days=days)
+    if n:
+        _LOG.info("Pruned %d SEC filing summary row(s) older than %d day(s)", n, days)
 
 
 def _find_filing_files(base_dir: Path, ticker: str, filing_type: str) -> List[Path]:
@@ -466,6 +485,7 @@ def main() -> None:
     st.warning(DISCLAIMER)
     db_manager.init_db()
     _patch_sec_gateway()
+    _prune_sec_summary_rows()
 
     with st.sidebar:
         st.header("Inputs")

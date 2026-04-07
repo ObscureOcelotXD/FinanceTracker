@@ -30,6 +30,28 @@ def test_realized_gain_insert_and_compute(tmp_path):
     assert round(row["realized_gain_pct"], 6) == 0.475
 
 
+def test_plaid_access_token_encrypted_at_rest_when_key_configured(tmp_path, monkeypatch):
+    _init_temp_db(tmp_path)
+    from cryptography.fernet import Fernet
+
+    key = Fernet.generate_key().decode("utf-8")
+    monkeypatch.setenv("PLAID_TOKEN_ENCRYPTION_KEY", key)
+
+    db_manager.insert_items("item-enc", "secret-access-token")
+    items = db_manager.get_items()
+    assert items == [{"item_id": "item-enc", "access_token": "secret-access-token"}]
+
+    conn = sqlite3.connect(db_manager.DATABASE)
+    raw = conn.execute("SELECT access_token FROM items WHERE item_id = ?", ("item-enc",)).fetchone()[
+        0
+    ]
+    conn.close()
+    assert raw != "secret-access-token"
+    assert Fernet(key.encode("utf-8")).decrypt(raw.encode("utf-8")).decode("utf-8") == (
+        "secret-access-token"
+    )
+
+
 def test_plaid_holdings_upsert_and_query(tmp_path):
     _init_temp_db(tmp_path)
     conn = sqlite3.connect(db_manager.DATABASE)
@@ -301,6 +323,39 @@ def test_prune_news_digest_articles_deletes_old_by_first_seen(tmp_path):
     assert n >= 1
     remaining, tot, _ = db_manager.list_news_digest_articles(per_page=50)
     assert tot == 0
+
+
+def test_prune_sec_filing_summaries_keeps_recent_deletes_old(tmp_path):
+    _init_temp_db(tmp_path)
+    conn = sqlite3.connect(db_manager.DATABASE)
+    old = "2020-01-01T00:00:00+00:00"
+    new = "2025-06-15T12:00:00+00:00"
+    conn.execute(
+        """
+        INSERT INTO sec_filing_summaries
+        (doc_hash, ticker, filing_type, filing_date, source_path, summary_text, model, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("hash_old", "X", "10-K", "2020-01-01", "/p", "old", "m", old),
+    )
+    conn.execute(
+        """
+        INSERT INTO sec_filing_summaries
+        (doc_hash, ticker, filing_type, filing_date, source_path, summary_text, model, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("hash_new", "Y", "10-Q", "2025-01-01", "/q", "new", "m", new),
+    )
+    conn.commit()
+    conn.close()
+    n = db_manager.prune_sec_filing_summaries(retention_days=365)
+    assert n >= 1
+    conn = sqlite3.connect(db_manager.DATABASE)
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM sec_filing_summaries")
+    count = cur.fetchone()[0]
+    conn.close()
+    assert count == 1
 
 
 def test_recent_null_summary_and_update_summary(tmp_path):

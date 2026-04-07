@@ -76,6 +76,7 @@ def _public_app_context():
         or os.getenv("SEC_EDGAR_EMAIL")
         or ""
     ).strip()
+    security_email = (os.getenv("PUBLIC_SECURITY_EMAIL") or "").strip()
     app_url = (os.getenv("PUBLIC_APP_URL") or "http://127.0.0.1:5000").strip()
     owner_name = (
         os.getenv("PUBLIC_OWNER_NAME")
@@ -85,9 +86,11 @@ def _public_app_context():
     return {
         "app_name": app_name,
         "support_email": support_email,
+        "security_email": security_email,
         "app_url": app_url.rstrip("/"),
         "owner_name": owner_name,
         "support_mailto": f"mailto:{support_email}" if support_email else None,
+        "security_mailto": f"mailto:{security_email}" if security_email else None,
     }
 
 
@@ -101,7 +104,27 @@ def create_flask_app():
     app.config['TEMPLATES_AUTO_RELOAD'] = True
     app.jinja_env.auto_reload = True
 
+    if _env_truthy("TRUST_PROXY_HEADERS"):
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(  # type: ignore[method-assign]
+            app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1
+        )
+
     _register_server_exception_logging(app)
+
+    @app.before_request
+    def _redirect_http_to_https_when_required():
+        if not _env_truthy("PUBLIC_REQUIRE_HTTPS"):
+            return None
+        if request.scheme == "https":
+            return None
+        host = (request.host or "").split(":")[0].lower()
+        if host in ("127.0.0.1", "localhost"):
+            return None
+        if request.url.startswith("http://"):
+            return redirect(request.url.replace("http://", "https://", 1), code=308)
+        return None
 
     @app.route('/')
     def index():
@@ -299,6 +322,23 @@ def create_flask_app():
             _LOG.warning("news digest refresh failed: %s", exc)
             return jsonify({"error": str(exc)}), 500
 
+    @app.route("/api/home_insights", methods=["GET"])
+    def api_home_insights_get():
+        from api.home_insights import get_home_insights_payload
+
+        return jsonify(get_home_insights_payload())
+
+    @app.route("/api/home_insights/refresh", methods=["POST"])
+    def api_home_insights_refresh():
+        try:
+            from api.home_insights import generate_and_store_home_insights, get_home_insights_payload
+
+            generate_and_store_home_insights()
+            return jsonify(get_home_insights_payload())
+        except Exception as exc:
+            _LOG.warning("home_insights refresh failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
     @app.route("/api/news_articles", methods=["GET"])
     def api_news_articles_list():
         """Stored news rows. With ``page`` query: offset pagination. Without ``page``: one local calendar day per response."""
@@ -322,6 +362,9 @@ def create_flask_app():
                     ticker=ticker,
                     sort=sort,
                 )
+                from api.news_ai import enrich_items_with_merged_tickers
+
+                items = enrich_items_with_merged_tickers(items)
                 pages = (total + per_effective - 1) // per_effective if total else 0
                 return jsonify(
                     {
@@ -353,6 +396,9 @@ def create_flask_app():
                 current = db_manager.today_local_iso_digest_tz()
 
             items = db_manager.list_news_digest_articles_for_local_date(current)
+            from api.news_ai import enrich_items_with_merged_tickers
+
+            items = enrich_items_with_merged_tickers(items)
             older_date, newer_date = db_manager.news_digest_local_date_neighbors(sorted_asc, current)
             latest = load_latest_digest()
             gen = (latest or {}).get("generated_at_utc")

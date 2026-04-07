@@ -24,11 +24,25 @@
           personal finance dashboards and analytics requested by the user.
         </p>
 
+        <h2>Scope</h2>
+        <p>
+          This policy applies to the deployed FinanceTracker instance where Plaid Link
+          is offered (see the project&rsquo;s public site URL in production).
+        </p>
+
         <h2>Data collected</h2>
         <p>
           When an account is connected through a data provider such as Plaid,
           FinanceTracker may receive read-only account, balance, transaction history,
           and investment holdings data required to power dashboards and analytics.
+        </p>
+
+        <h2>Your consent</h2>
+        <p>
+          Before connecting an institution via Plaid Link, the app asks you to
+          acknowledge this policy. By doing so and completing Plaid Link, you
+          consent to the collection, processing, and local storage of the data
+          described here for the features you use.
         </p>
 
         <h2>How data is used</h2>
@@ -42,8 +56,15 @@
         <h2>Credentials and tokens</h2>
         <p>
           Bank credentials are handled by the account-linking provider and are not
-          stored by FinanceTracker. Provider access tokens are stored server-side and
-          are never exposed client-side.
+          stored by FinanceTracker. Provider access tokens are stored server-side only,
+          never sent to the browser. Deployments may optionally encrypt those tokens at
+          rest on disk.
+        </p>
+
+        <h2>Security (transport)</h2>
+        <p>
+          Production should use HTTPS (TLS 1.2 or newer) between browser and server.
+          Local development may use HTTP on localhost.
         </p>
 
         <h2>Data sharing</h2>
@@ -54,8 +75,9 @@
 
         <h2>Retention and deletion</h2>
         <p>
-          Linked institutions and locally stored financial data can be removed when no
-          longer needed.
+          Data is kept only as long as needed to provide the product. Users may
+          disconnect linked institutions where the app supports it. This policy is
+          reviewed when data practices change.
         </p>
       </section>
     </div>

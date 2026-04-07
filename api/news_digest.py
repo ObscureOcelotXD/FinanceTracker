@@ -771,10 +771,28 @@ def write_outputs(digest: dict[str, Any], out_dir: Path | None = None) -> tuple[
         n = db_manager.upsert_news_digest_articles_from_digest(digest)
         _LOG.info("news_digest_articles: upserted %d row(s)", n)
         _backfill_null_summaries_after_digest()
+        try:
+            from api.news_ai import run_news_ai_relevance_batch
+
+            ai_n = run_news_ai_relevance_batch()
+            if ai_n:
+                _LOG.info("news_digest: AI holdings relevance for %d article(s)", ai_n)
+        except Exception as exc:
+            _LOG.warning("news_digest: AI relevance batch skipped: %s", exc)
         _retag_recent_local_days_after_digest()
         pruned = db_manager.prune_news_digest_articles()
         if pruned:
             _LOG.info("news_digest_articles: pruned %d row(s) (retention)", pruned)
+
+        def _bg_home_insights() -> None:
+            try:
+                from api.home_insights import generate_and_store_home_insights
+
+                generate_and_store_home_insights()
+            except Exception as exc:
+                _LOG.warning("home_insights background: %s", exc)
+
+        threading.Thread(target=_bg_home_insights, daemon=True).start()
     except Exception as exc:
         _LOG.warning("news_digest_articles upsert skipped: %s", exc)
     return json_path, md_path
