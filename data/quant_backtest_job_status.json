@@ -1,0 +1,15 @@
+{
+  "job_id": "f037479f-d9d3-4e9a-b364-3d3b7053d0ba",
+  "status": "done",
+  "message": "Backtest complete (sma) for CRWD, HON, MSFT, PLTR, RKLB.",
+  "error": null,
+  "tickers": [
+    "CRWD",
+    "HON",
+    "MSFT",
+    "PLTR",
+    "RKLB"
+  ],
+  "updated_at": "2026-04-08T00:03:30+00:00",
+  "finished_at": "2026-04-08T00:03:30+00:00"
+}

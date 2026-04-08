@@ -390,6 +390,85 @@ def test_prune_news_digest_articles_deletes_old_by_first_seen(tmp_path):
     assert tot == 0
 
 
+def test_quant_risk_snapshots_roundtrip(tmp_path):
+    _init_temp_db(tmp_path)
+    payload = {
+        "volatility_pct": 14.5,
+        "max_drawdown_pct": -8.0,
+        "beta": 1.1,
+        "last_updated": "2026-04-01",
+        "fresh": True,
+        "top_sector": "Technology",
+        "top_sector_pct": 40.0,
+        "hhi": 0.25,
+        "diversification_ratio": 0.9,
+    }
+    db_manager.upsert_quant_risk_snapshot("2026-04-01", payload)
+    rows = db_manager.get_quant_risk_snapshots(limit=5)
+    assert len(rows) == 1
+    assert rows[0]["snapshot_date"] == "2026-04-01"
+    assert rows[0]["payload"]["beta"] == 1.1
+    db_manager.upsert_quant_risk_snapshot("2026-04-01", {**payload, "beta": 1.2})
+    rows2 = db_manager.get_quant_risk_snapshots(limit=5)
+    assert rows2[0]["payload"]["beta"] == 1.2
+
+
+def test_quant_backtest_runs_roundtrip(tmp_path):
+    _init_temp_db(tmp_path)
+    params = {
+        "portfolio": {"AAPL": 1.0},
+        "start": "2020-01-01",
+        "end": "2021-01-01",
+        "strategy_name": "sma",
+        "fast_window": 10,
+        "slow_window": 30,
+        "rebalance_monthly": False,
+    }
+    stats = {"total_return_pct": 5.0, "sharpe_ratio": 1.2}
+    bench = {"total_return_pct": 4.0}
+    db_manager.insert_quant_backtest_run("job-q1", params, stats, bench)
+    one = db_manager.get_quant_backtest_run_by_job_id("job-q1")
+    assert one
+    assert one["stats"]["total_return_pct"] == 5.0
+    assert one["benchmark_stats"]["total_return_pct"] == 4.0
+    rows = db_manager.get_quant_backtest_runs(limit=5)
+    assert len(rows) == 1
+    assert rows[0]["job_id"] == "job-q1"
+
+
+def test_quant_backtest_runs_filtered(tmp_path):
+    _init_temp_db(tmp_path)
+    base_sma = {
+        "portfolio": {"AAPL": 1.0, "MSFT": 2.0},
+        "start": "2020-01-01",
+        "end": "2021-01-01",
+        "strategy_name": "sma",
+        "fast_window": 10,
+        "slow_window": 30,
+        "rebalance_monthly": False,
+    }
+    base_bh = {
+        **base_sma,
+        "strategy_name": "buy_hold",
+    }
+    db_manager.insert_quant_backtest_run("j1", base_sma, {"total_return_pct": 1.0}, {})
+    db_manager.insert_quant_backtest_run("j2", base_bh, {"total_return_pct": 2.0}, {})
+    db_manager.insert_quant_backtest_run(
+        "j3",
+        {**base_sma, "portfolio": {"GOOG": 1.0}},
+        {"total_return_pct": 3.0},
+        {},
+    )
+    only_sma = db_manager.get_quant_backtest_runs_filtered(limit=10, strategy_name="sma")
+    assert len(only_sma) == 2
+    assert {r["job_id"] for r in only_sma} == {"j1", "j3"}
+    msft = db_manager.get_quant_backtest_runs_filtered(limit=10, ticker_contains="MSFT")
+    assert len(msft) == 2
+    goog = db_manager.get_quant_backtest_runs_filtered(limit=10, ticker_contains="GOOG")
+    assert len(goog) == 1
+    assert goog[0]["job_id"] == "j3"
+
+
 def test_prune_sec_filing_summaries_keeps_recent_deletes_old(tmp_path):
     _init_temp_db(tmp_path)
     conn = sqlite3.connect(db_manager.DATABASE)

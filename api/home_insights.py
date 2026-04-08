@@ -27,6 +27,8 @@ _DEFAULT_GROQ_MAX_TOKENS = 1100
 _DEFAULT_PORTFOLIO_TICKERS_MAX = 20
 _DEFAULT_PER_TICKER_NEWS = 4
 _DEFAULT_MAX_SOURCE_LABELS = 40
+_DEFAULT_MAX_QUANT = 8
+_DEFAULT_MAX_RISK_SNAPSHOTS = 14
 
 
 def _env_int(name: str, default: int, min_v: int = 1, max_v: int | None = None) -> int:
@@ -68,6 +70,10 @@ def _limits() -> dict[str, int]:
         ),
         "max_source_labels": _env_int(
             "HOME_INSIGHTS_MAX_SOURCE_LABELS", _DEFAULT_MAX_SOURCE_LABELS, 8, 80
+        ),
+        "max_quant": _env_int("HOME_INSIGHTS_MAX_QUANT", _DEFAULT_MAX_QUANT, 0, 40),
+        "max_risk_snapshots": _env_int(
+            "HOME_INSIGHTS_MAX_RISK_SNAPSHOTS", _DEFAULT_MAX_RISK_SNAPSHOTS, 0, 60
         ),
     }
 
@@ -147,16 +153,22 @@ def _call_groq(system: str, user: str) -> tuple[str | None, str]:
 
 
 _SYSTEM = (
-    "You connect recent market news with SEC filing summaries the user has generated. "
+    "You connect recent market news, SEC filing summaries the user has generated, "
+    "daily portfolio risk metrics from the app's home quant cards (volatility, drawdown, beta, "
+    "sector concentration, etc.; stored as-of each portfolio history date), and "
+    "recent simulated quant backtest results from this app. "
     "News items may include matched tickers, categories, and optional AI relevance "
     "(which holdings the story mentions or materially concerns). "
+    "Portfolio risk lines summarize the user's linked portfolio path in the app (not generic market data). "
+    "Quant backtest lines are educational simulations (not live performance); use them only as context "
+    "alongside news, filings, holdings, and portfolio risk. "
     "Prioritize connections that relate to the user's stated portfolio tickers when relevant. "
     "Produce actionable, concise insights for a retail investor. "
     "Output ONLY valid JSON with keys: "
     "insights (string, use short bullet lines with leading '- ' or numbers), "
-    "sources (array of objects, each with: kind 'news' or 'sec', title string, "
-    "optional url string for news, optional detail string for SEC e.g. ticker and form). "
-    "Use label fields (N1, S1, …) in sources when citing a specific provided item. "
+    "sources (array of objects, each with: kind 'news' or 'sec' or 'quant' or 'portfolio_risk', "
+    "title string, optional url string for news, optional detail string for SEC, quant, or portfolio_risk. "
+    "Use label fields (N1, S1, R1, Q1, …) in sources when citing a specific provided item. "
     "List only sources you actually used in your reasoning (subset of the provided inputs). "
     "If inputs are empty or unrelated, set insights to a brief note and sources to []. "
     "No investment advice; educational framing only."
@@ -248,6 +260,8 @@ def _build_context() -> tuple[str, list[dict[str, Any]]]:
 
     rows = _gather_news_rows_for_insights()
     sec_rows = db_manager.get_sec_summaries(limit=lim["max_sec"])
+    quant_rows = db_manager.get_quant_backtest_runs(limit=lim["max_quant"])
+    risk_rows = db_manager.get_quant_risk_snapshots(limit=lim["max_risk_snapshots"])
 
     catalog: list[dict[str, Any]] = []
     lines: list[str] = [
@@ -327,6 +341,71 @@ def _build_context() -> tuple[str, list[dict[str, Any]]]:
             lines.append(f"  summary_excerpt: {stext}")
         lines.append("")
 
+    lines.append(
+        "=== PORTFOLIO RISK (home quant cards; daily snapshots, as-of portfolio history date) ==="
+    )
+    for i, rec in enumerate(risk_rows):
+        p = rec.get("payload") or {}
+        d = (rec.get("snapshot_date") or "").strip()
+        label = f"R{i + 1}"
+        top_s = p.get("top_sector")
+        ts = f"{top_s} ({p.get('top_sector_pct')}%)" if top_s else "—"
+        catalog.append(
+            {
+                "kind": "portfolio_risk",
+                "label": label,
+                "title": f"Portfolio risk as-of {d}",
+                "detail": f"vol={p.get('volatility_pct')}% dd={p.get('max_drawdown_pct')}%",
+            }
+        )
+        lines.append(f"[{label}] as-of {d} (metrics align with home page quant cards for that day)")
+        lines.append(
+            f"  volatility_pct={p.get('volatility_pct')}, max_drawdown_pct={p.get('max_drawdown_pct')}, "
+            f"beta_vs_spy={p.get('beta')}, data_fresh={p.get('fresh')}"
+        )
+        lines.append(
+            f"  top_sector={ts}, hhi={p.get('hhi')}, diversification_ratio={p.get('diversification_ratio')}"
+        )
+        lines.append(f"  snapshot_recorded_utc={rec.get('created_at_utc')}")
+        lines.append("")
+
+    lines.append("=== QUANT BACKTESTS (recent simulated runs in this app) ===")
+    for i, rec in enumerate(quant_rows):
+        p = rec.get("params") or {}
+        st_ = rec.get("stats") or {}
+        bh = rec.get("benchmark_stats") or {}
+        port = p.get("portfolio") if isinstance(p.get("portfolio"), dict) else {}
+        tk = ", ".join(sorted(str(k).upper() for k in port.keys()))[:220]
+        strat = (p.get("strategy_name") or "?").strip()
+        rng = f"{p.get('start', '')} → {p.get('end', '')}"
+        label = f"Q{i + 1}"
+        catalog.append(
+            {
+                "kind": "quant",
+                "label": label,
+                "title": f"{strat} {rng}".strip(),
+                "detail": tk or None,
+            }
+        )
+        lines.append(f"[{label}] strategy={strat} period={rng}")
+        if tk:
+            lines.append(f"  tickers: {tk}")
+        lines.append(
+            "  strategy_stats: "
+            f"total_return_pct={st_.get('total_return_pct')}, "
+            f"annualized_return_pct={st_.get('annualized_return_pct')}, "
+            f"sharpe={st_.get('sharpe_ratio')}, "
+            f"max_drawdown_pct={st_.get('max_drawdown_pct')}, "
+            f"trades={st_.get('trades')}"
+        )
+        lines.append(
+            "  buy_hold_benchmark: "
+            f"total_return_pct={bh.get('total_return_pct')}, "
+            f"sharpe={bh.get('sharpe_ratio')}, "
+            f"max_drawdown_pct={bh.get('max_drawdown_pct')}"
+        )
+        lines.append("")
+
     body = "\n".join(lines).strip()
     mch = lim["max_prompt_chars"]
     if len(body) > mch:
@@ -345,7 +424,7 @@ def _normalize_sources(raw: Any, catalog: list[dict[str, Any]]) -> list[dict[str
         if not isinstance(item, dict):
             continue
         kind = (item.get("kind") or "").strip().lower()
-        if kind not in ("news", "sec"):
+        if kind not in ("news", "sec", "quant", "portfolio_risk"):
             continue
         title = (item.get("title") or "").strip()
         url = (item.get("url") or "").strip() or None
@@ -357,6 +436,10 @@ def _normalize_sources(raw: Any, catalog: list[dict[str, Any]]) -> list[dict[str
             if kind == "news":
                 url = url or base.get("url") or None
             if kind == "sec" and not detail:
+                detail = base.get("detail")
+            if kind == "quant" and not detail:
+                detail = base.get("detail")
+            if kind == "portfolio_risk" and not detail:
                 detail = base.get("detail")
         entry: dict[str, Any] = {"kind": kind, "title": title}
         if url:
@@ -373,6 +456,13 @@ def generate_and_store_home_insights() -> bool:
     Pull latest news + SEC summaries, call Groq, persist cache. Returns True on success.
     """
     from services import db_manager
+
+    try:
+        from api.quant_risk import record_daily_risk_snapshot_for_insights
+
+        record_daily_risk_snapshot_for_insights()
+    except Exception as exc:
+        _LOG.warning("quant risk snapshot for insights: %s", exc)
 
     if not _enabled():
         return False

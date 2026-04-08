@@ -1043,7 +1043,6 @@ if (geckoBtn) {
     (function () {
       var el = document.getElementById("secFilingJobToast");
       if (!el) return;
-      var STORAGE_KEY = "ft_sec_notified_job";
       var timer = null;
       function hideToast() {
         el.classList.remove("is-visible");
@@ -1061,39 +1060,57 @@ if (geckoBtn) {
         if (timer) clearTimeout(timer);
         timer = setTimeout(hideToast, 10000);
       }
-      function readSeen() {
+      function readSeen(storageKey) {
         try {
-          var raw = sessionStorage.getItem(STORAGE_KEY);
+          var raw = sessionStorage.getItem(storageKey);
           return raw ? JSON.parse(raw) : {};
         } catch (e) {
           return {};
         }
       }
-      function writeSeen(obj) {
+      function writeSeen(storageKey, obj) {
         try {
-          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+          sessionStorage.setItem(storageKey, JSON.stringify(obj));
         } catch (e) {}
       }
+      function processJob(data, storageKey, okDefault, errDefault) {
+        if (!data || !data.job_id) return;
+        var st = data.status;
+        var jid = data.job_id;
+        var seen = readSeen(storageKey);
+        if (st === "done" && seen.done !== jid && data.toast_eligible) {
+          showToast(data.message || okDefault, false);
+          seen.done = jid;
+          writeSeen(storageKey, seen);
+        }
+        if (st === "error" && seen.error !== jid && data.toast_eligible) {
+          showToast(data.error || errDefault, true);
+          seen.error = jid;
+          writeSeen(storageKey, seen);
+        }
+      }
       function poll() {
-        fetch("/api/sec_filing_job_status", { credentials: "same-origin" })
-          .then(function (r) {
+        Promise.all([
+          fetch("/api/sec_filing_job_status", { credentials: "same-origin" }).then(function (r) {
             return r.json();
-          })
-          .then(function (data) {
-            if (!data || !data.job_id) return;
-            var st = data.status;
-            var jid = data.job_id;
-            var seen = readSeen();
-            if (st === "done" && seen.done !== jid && data.toast_eligible) {
-              showToast(data.message || "SEC filings job completed.", false);
-              seen.done = jid;
-              writeSeen(seen);
-            }
-            if (st === "error" && seen.error !== jid && data.toast_eligible) {
-              showToast(data.error || "SEC filings job failed.", true);
-              seen.error = jid;
-              writeSeen(seen);
-            }
+          }),
+          fetch("/api/quant_job_status", { credentials: "same-origin" }).then(function (r) {
+            return r.json();
+          }),
+        ])
+          .then(function (pair) {
+            processJob(
+              pair[0],
+              "ft_sec_notified_job",
+              "SEC filings job completed.",
+              "SEC filings job failed."
+            );
+            processJob(
+              pair[1],
+              "ft_quant_notified_job",
+              "Quant backtest completed.",
+              "Quant backtest failed."
+            );
           })
           .catch(function () {});
       }

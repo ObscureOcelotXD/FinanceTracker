@@ -402,6 +402,31 @@ def init_db():
         )
     """)
 
+    cur17 = con.cursor()
+    cur17.execute("""
+        CREATE TABLE IF NOT EXISTS quant_backtest_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id TEXT NOT NULL UNIQUE,
+            created_at_utc TEXT NOT NULL,
+            params_json TEXT NOT NULL,
+            stats_json TEXT NOT NULL,
+            benchmark_stats_json TEXT
+        )
+    """)
+    cur17.execute("""
+        CREATE INDEX IF NOT EXISTS idx_quant_backtest_runs_created
+        ON quant_backtest_runs (created_at_utc DESC)
+    """)
+
+    cur18 = con.cursor()
+    cur18.execute("""
+        CREATE TABLE IF NOT EXISTS quant_risk_snapshots (
+            snapshot_date TEXT PRIMARY KEY,
+            payload_json TEXT NOT NULL,
+            created_at_utc TEXT NOT NULL
+        )
+    """)
+
     con.commit()
     con.close()
     prune_error_logs()
@@ -871,6 +896,8 @@ def wipe_all_data(force: bool = False):
     _safe_delete("client_error_log")
     _safe_delete("news_digest_articles")
     _safe_delete("home_insights_cache")
+    _safe_delete("quant_backtest_runs")
+    _safe_delete("quant_risk_snapshots")
     conn.commit()
     conn.close()
 
@@ -1105,6 +1132,212 @@ def upsert_home_insights(
     )
     conn.commit()
     conn.close()
+
+
+def insert_quant_backtest_run(
+    job_id: str,
+    params: dict[str, Any],
+    stats: dict[str, Any],
+    benchmark_stats: Optional[dict[str, Any]] = None,
+) -> None:
+    """Persist a completed quant backtest for history and home insights."""
+    jid = (job_id or "").strip()[:80]
+    if not jid:
+        raise ValueError("job_id required")
+    conn = get_connection()
+    cur = conn.cursor()
+    now = datetime.now(timezone.utc).isoformat()
+    cur.execute(
+        """
+        INSERT INTO quant_backtest_runs (
+            job_id, created_at_utc, params_json, stats_json, benchmark_stats_json
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            jid,
+            now,
+            json.dumps(params, ensure_ascii=False),
+            json.dumps(stats, ensure_ascii=False),
+            json.dumps(benchmark_stats, ensure_ascii=False) if benchmark_stats is not None else None,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_quant_backtest_run_by_job_id(job_id: str) -> Optional[dict[str, Any]]:
+    jid = (job_id or "").strip()[:80]
+    if not jid:
+        return None
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT job_id, created_at_utc, params_json, stats_json, benchmark_stats_json
+        FROM quant_backtest_runs WHERE job_id = ?
+        """,
+        (jid,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return _row_to_quant_run(row)
+
+
+def get_quant_backtest_runs(limit: int = 10) -> list[dict[str, Any]]:
+    """Recent backtests for home insights and Streamlit history (newest first)."""
+    n = max(0, min(int(limit), 1000))
+    if n == 0:
+        return []
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT job_id, created_at_utc, params_json, stats_json, benchmark_stats_json
+        FROM quant_backtest_runs
+        ORDER BY created_at_utc DESC
+        LIMIT ?
+        """,
+        (n,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [_row_to_quant_run(r) for r in rows]
+
+
+def get_quant_backtest_runs_filtered(
+    limit: int = 25,
+    ticker_contains: Optional[str] = None,
+    strategy_name: Optional[str] = None,
+    scan_max: int = 400,
+) -> list[dict[str, Any]]:
+    """
+    Newest-first backtests with optional filters (for Streamlit history).
+    Scans up to ``scan_max`` rows then filters so matches aren't cut off by a small SQL limit.
+    """
+    lim = max(1, min(int(limit), 200))
+    cap = max(lim, min(int(scan_max), 800))
+    pool = get_quant_backtest_runs(limit=cap)
+    tix = (ticker_contains or "").strip().upper()
+    strat = (strategy_name or "").strip().lower()
+    out: list[dict[str, Any]] = []
+    for rec in pool:
+        p = rec.get("params") or {}
+        if strat and (p.get("strategy_name") or "").lower() != strat:
+            continue
+        if tix:
+            port = p.get("portfolio")
+            if not isinstance(port, dict):
+                continue
+            keys = [str(k).upper() for k in port.keys()]
+            if not any(tix in k for k in keys):
+                continue
+        out.append(rec)
+        if len(out) >= lim:
+            break
+    return out
+
+
+def _row_to_quant_run(row: tuple[Any, ...]) -> dict[str, Any]:
+    def _loads(raw: Any) -> dict[str, Any]:
+        if raw is None or raw == "":
+            return {}
+        try:
+            o = json.loads(raw)
+            return o if isinstance(o, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
+    return {
+        "job_id": row[0],
+        "created_at_utc": row[1],
+        "params": _loads(row[2]),
+        "stats": _loads(row[3]),
+        "benchmark_stats": _loads(row[4]),
+    }
+
+
+def upsert_quant_risk_snapshot(snapshot_date: str, payload: dict[str, Any]) -> None:
+    """
+    One row per portfolio as-of date (YYYY-MM-DD), matching ``last_updated`` from risk summary.
+    Upsert refreshes metrics when the same day is recomputed.
+    """
+    d = (snapshot_date or "").strip()[:10]
+    if not d or len(d) < 10:
+        raise ValueError("snapshot_date must be YYYY-MM-DD")
+    conn = get_connection()
+    cur = conn.cursor()
+    now = datetime.now(timezone.utc).isoformat()
+    cur.execute(
+        """
+        INSERT INTO quant_risk_snapshots (snapshot_date, payload_json, created_at_utc)
+        VALUES (?, ?, ?)
+        ON CONFLICT(snapshot_date) DO UPDATE SET
+            payload_json = excluded.payload_json,
+            created_at_utc = excluded.created_at_utc
+        """,
+        (d, json.dumps(payload, ensure_ascii=False), now),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_quant_risk_snapshots(limit: int = 14) -> list[dict[str, Any]]:
+    """Daily portfolio risk card metrics, newest calendar date first."""
+    n = max(0, min(int(limit), 366))
+    if n == 0:
+        return []
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT snapshot_date, payload_json, created_at_utc
+        FROM quant_risk_snapshots
+        ORDER BY snapshot_date DESC
+        LIMIT ?
+        """,
+        (n,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            payload = json.loads(row[1] or "{}")
+        except json.JSONDecodeError:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        out.append(
+            {
+                "snapshot_date": row[0],
+                "payload": payload,
+                "created_at_utc": row[2],
+            }
+        )
+    return out
+
+
+def prune_quant_risk_snapshots(retention_days: Optional[int] = None) -> int:
+    """Drop snapshots older than retention (default QUANT_RISK_SNAPSHOT_RETENTION_DAYS or 120)."""
+    if retention_days is None:
+        raw = (os.getenv("QUANT_RISK_SNAPSHOT_RETENTION_DAYS") or "120").strip()
+        try:
+            retention_days = int(raw)
+        except ValueError:
+            retention_days = 120
+    if retention_days <= 0:
+        return 0
+    cutoff = (datetime.now(timezone.utc).date() - timedelta(days=retention_days)).isoformat()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM quant_risk_snapshots WHERE snapshot_date < ?", (cutoff,))
+    deleted = cur.rowcount if cur.rowcount is not None else 0
+    conn.commit()
+    conn.close()
+    return int(deleted)
 
 
 # region Data Retrieval for Dash App using Pandas DataFrame

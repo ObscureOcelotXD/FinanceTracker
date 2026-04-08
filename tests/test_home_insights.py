@@ -11,14 +11,20 @@ def test_normalize_sources_merges_labels():
     catalog = [
         {"kind": "news", "label": "N1", "title": "Headline", "url": "https://a.com/x"},
         {"kind": "sec", "label": "S1", "title": "MSFT 10-K", "detail": "2024-01-01"},
+        {"kind": "portfolio_risk", "label": "R1", "title": "Risk as-of 2026-04-01", "detail": "vol=12%"},
+        {"kind": "quant", "label": "Q1", "title": "sma 2020→2021", "detail": "AAPL"},
     ]
     raw = [
         {"kind": "news", "label": "N1", "title": ""},
         {"kind": "sec", "label": "S1", "title": "MSFT 10-K"},
+        {"kind": "portfolio_risk", "label": "R1", "title": ""},
+        {"kind": "quant", "label": "Q1", "title": ""},
     ]
     out = hi._normalize_sources(raw, catalog)
-    assert len(out) == 2
+    assert len(out) == 4
     assert out[0].get("url") == "https://a.com/x"
+    assert out[2].get("detail") == "vol=12%"
+    assert out[3].get("detail") == "AAPL"
 
 
 def test_generate_stores_insight(tmp_path, monkeypatch):
@@ -46,6 +52,9 @@ def test_generate_stores_insight(tmp_path, monkeypatch):
     }
     monkeypatch.setattr(hi.requests, "post", mock_post)
     monkeypatch.setattr(hi, "_build_context", lambda: ("prompt body", [{"kind": "news", "label": "N1", "title": "T", "url": "https://z.com"}]))
+    monkeypatch.setattr(
+        "api.quant_risk.record_daily_risk_snapshot_for_insights", lambda: None,
+    )
 
     assert hi.generate_and_store_home_insights() is True
     row = db_manager.get_home_insights()
@@ -158,6 +167,8 @@ def test_build_context_includes_tags_and_ai_line(monkeypatch):
         ],
     )
     monkeypatch.setattr(db_manager, "get_sec_summaries", lambda limit: [])
+    monkeypatch.setattr(db_manager, "get_quant_backtest_runs", lambda limit: [])
+    monkeypatch.setattr(db_manager, "get_quant_risk_snapshots", lambda limit: [])
     body, catalog = hi._build_context()
     assert "tickers_matched: LMT" in body
     assert "categories: defense" in body

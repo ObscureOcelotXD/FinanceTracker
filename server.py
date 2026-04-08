@@ -334,6 +334,12 @@ def create_flask_app():
 
         return jsonify(sec_filing_job.read_status())
 
+    @app.route("/api/quant_job_status", methods=["GET"])
+    def api_quant_job_status():
+        from services import quant_job
+
+        return jsonify(quant_job.read_status())
+
     @app.route("/api/home_insights", methods=["GET"])
     def api_home_insights_get():
         from api.home_insights import get_home_insights_payload

@@ -178,3 +178,17 @@ def compute_risk_summary() -> Dict[str, Any]:
         "hhi": rnd(hhi, 4),
         "diversification_ratio": rnd(diversification_ratio, 2),
     }
+
+
+def record_daily_risk_snapshot_for_insights() -> None:
+    """
+    Store the current ``compute_risk_summary()`` payload keyed by portfolio as-of date
+    (``last_updated``). Called when home insights are generated so Groq can use daily history.
+    """
+    data = compute_risk_summary()
+    raw = data.get("last_updated")
+    if not raw:
+        return
+    snap = str(raw)[:10]
+    db_manager.upsert_quant_risk_snapshot(snap, data)
+    db_manager.prune_quant_risk_snapshots()
