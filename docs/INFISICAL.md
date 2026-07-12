@@ -30,9 +30,8 @@ FinanceTracker can load secrets from [Infisical](https://infisical.com) using **
    **Streamlit**
    - `STREAMLIT_AUTO_START` (e.g. `true`)
 
-   **SEC filings / AI**
-   - `GEMINI_API_KEY`, `GEMINI_MODEL`
-   - Optional: `GROQ_API_KEY`, `GROQ_MODEL`, `HF_API_KEY`, `HF_MODEL`
+   **SEC filings / AI (Groq)**
+   - `GROQ_API_KEY`, optional `GROQ_MODEL` (also used for news AI + home insights)
    - `SEC_EDGAR_COMPANY`, `SEC_EDGAR_EMAIL`, `SEC_EDGAR_USER_AGENT`
    - `SEC_FILINGS_RETENTION_DAYS`
 
@@ -41,6 +40,7 @@ FinanceTracker can load secrets from [Infisical](https://infisical.com) using **
    - `FINNHUB_API_KEY`
    - `POLYGON_API_KEY`
    - Umbrel: `UMBREL_LIGHTNING_MACAROON`, `UMBREL_RPC_PASS`, and other `UMBREL_*` as needed. You can keep these in `.env` only (do not add to Infisical) if you prefer; `load_dotenv()` will still load them when you run under `infisical run`.
+   - Portfolio sync (optional): `UMBREL_TAILSCALE_IP` + `UMBREL_PASSWORD`. File lands at **Home → Documents → Portfolio**. See `docs/PORTFOLIO_SYNC.md`.
 
 3. **Install and link the CLI**
    ```bash

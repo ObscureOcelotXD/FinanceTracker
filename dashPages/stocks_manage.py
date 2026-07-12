@@ -1026,7 +1026,7 @@ def manage_auto_hide_force_update_alert(_n_intervals, is_open):
 )
 def load_plaid_holdings(ts, institution_value):
     if db_manager.get_hide_plaid():
-        return [], [{"label": "All", "value": "All"}], "All"
+        return [], [{"label": "All", "value": "All"}]
     institutions = db_manager.get_institutions()
     options = [{"label": "All", "value": "All"}] + [
         {"label": name, "value": name} for name in institutions

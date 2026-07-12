@@ -28,6 +28,5 @@ sec-edgar-downloader>=4.0.0
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
 
-# AI / summarization
-google-genai>=0.3.0
+# AI / summarization (Groq)
 pyrate-limiter>=3.0.0

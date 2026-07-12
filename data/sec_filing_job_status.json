@@ -1,22 +1,22 @@
 {
-  "job_id": "f25c7adf-1a0b-49eb-bb58-6080dd9b4a6f",
+  "job_id": "4f4f3668-82f0-4771-b115-1705c086e045",
   "status": "done",
-  "message": "Completed SEC filing run for PLTR. Summaries are saved locally.",
+  "message": "Completed SEC filing run for PANW. Summaries are saved locally.",
   "log_lines": [
-    "Provider: Groq (primary) \u2192 Gemini (fallback)",
+    "Provider: Groq (llama-3.3-70b-versatile)",
     "",
-    "PLTR \u2014 Palantir Technologies Inc.",
-    "  10-K \u2014 2026-02-17",
+    "PANW \u2014 Palo Alto Networks, Inc.",
+    "  10-K \u2014 2025-08-29",
     "    summarized \u2014 model: groq:llama-3.3-70b-versatile",
-    "  10-Q \u2014 2025-11-04",
+    "  10-Q \u2014 2026-06-03",
     "    summarized \u2014 model: groq:llama-3.3-70b-versatile",
     "",
     "AI-generated summaries are approximate and for educational use only. Always read the official SEC filings at sec.gov. Not financial advice or investment recommendation."
   ],
   "error": null,
   "tickers": [
-    "PLTR"
+    "PANW"
   ],
-  "updated_at": "2026-04-07T23:43:11+00:00",
-  "finished_at": "2026-04-07T23:43:11+00:00"
+  "updated_at": "2026-07-12T04:17:18+00:00",
+  "finished_at": "2026-07-12T04:17:18+00:00"
 }

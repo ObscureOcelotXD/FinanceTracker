@@ -41,6 +41,7 @@ Secrets are loaded from the **environment** only (`os.getenv`). No Infisical SDK
 - **`dashPages/`** – Dash pages (stocks, accounts, realized gains, manage).
 - **`api/`** – Flask blueprints and helpers: Plaid, Alpha Vantage, Finnhub, CoinGecko, Umbrel, BTC wallet, etc. **`api/quant_risk.py`** – Quant risk summary logic (used by `/quant/risk_summary`).
 - **`docs/INFISICAL.md`** – Infisical CLI setup and secret names (no SDK; use `infisical run -- ./start.sh` or `make run-infisical`).
+- **`docs/PORTFOLIO_SYNC.md`** – Optional Umbrel File Browser + Tailscale sync for `portfolio.csv`.
 - **`templates/`**, **`static/`** – Jinja HTML and static assets.
 - **`scripts/`** – Backfill and one-off scripts.
 - **`tests/`** – Pytest tests (db_manager, btc_wallet, finnhub_sector_cache, server routes, quant_risk).
@@ -198,5 +199,5 @@ When you click **Fetch & Summarize** in the SEC Filings page, the app:
 - Downloads the newest filing (if not already cached locally)
 - Extracts plain text from the filing
 - Splits the text into chunks
-- Summarizes with Groq (primary), then Gemini (fallback)
+- Summarizes with Groq (`GROQ_API_KEY`)
 - Saves the summary and metadata in `sec_filing_summaries`

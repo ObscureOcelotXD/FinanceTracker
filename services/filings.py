@@ -2,9 +2,8 @@
 SEC Filings Info (Streamlit)
 
 Setup:
-  pip install sec-edgar-downloader beautifulsoup4 lxml google-genai streamlit yfinance
-  Get a free Gemini API key at https://aistudio.google.com/
-  Set GEMINI_API_KEY in .env or Streamlit secrets.
+  pip install sec-edgar-downloader beautifulsoup4 lxml streamlit yfinance
+  Set GROQ_API_KEY (and optionally GROQ_MODEL) in .env or Streamlit secrets.
 """
 
 from __future__ import annotations
@@ -23,7 +22,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import streamlit as st
 import yfinance as yf
 from bs4 import BeautifulSoup
-from google import genai
 import pyrate_limiter
 import requests
 
@@ -57,15 +55,7 @@ from sec_edgar_downloader._constants import ROOT_SAVE_FOLDER_NAME
 import sec_edgar_downloader._sec_gateway as sec_gateway
 
 
-DEFAULT_MODEL = "gemini-2.0-flash"
-FALLBACK_MODEL = "gemini-flash-latest"
-MODEL_CANDIDATES = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-flash-latest",
-    "gemini-pro-latest",
-]
+DEFAULT_GROQ_MODEL = "llama-3.1-70b-versatile"
 FILING_TYPES = ["10-K", "10-Q", "DEF 14A"]
 DEFAULT_TICKERS = "AAPL"
 MAX_TICKERS = 5
@@ -311,36 +301,26 @@ def _guess_filing_date(path: Path) -> str:
     return date.fromtimestamp(path.stat().st_mtime).isoformat()
 
 
-def _pick_model(client, override: Optional[str]) -> str:
-    try:
-        available = [m.name for m in client.models.list()]
-    except Exception:
-        available = []
-    if override:
-        return override
-    for candidate in MODEL_CANDIDATES:
-        if not available or candidate in available or f"models/{candidate}" in available:
-            return candidate
-    return FALLBACK_MODEL
+def _groq_api_key() -> Optional[str]:
+    return (os.getenv("GROQ_API_KEY") or _read_streamlit_secret("GROQ_API_KEY") or "").strip() or None
 
 
-def _maybe_wait_on_quota(exc: Exception) -> bool:
-    msg = str(exc)
-    if "RESOURCE_EXHAUSTED" not in msg and "Quota exceeded" not in msg:
-        return False
-    match = re.search(r"retryDelay': '(\d+)s'", msg) or re.search(r"retryDelay\": \"(\d+)s", msg)
-    if match:
-        wait_seconds = int(match.group(1))
-        time.sleep(wait_seconds)
-        return True
-    return False
+def _groq_model() -> str:
+    return (
+        (os.getenv("GROQ_MODEL") or _read_streamlit_secret("GROQ_MODEL") or DEFAULT_GROQ_MODEL)
+        .strip()
+        or DEFAULT_GROQ_MODEL
+    )
 
 
-def _summarize_with_groq(prompt: str) -> Tuple[Optional[str], Optional[str]]:
-    api_key = os.getenv("GROQ_API_KEY")
+def _require_groq() -> Tuple[str, str]:
+    api_key = _groq_api_key()
     if not api_key:
-        return None, None
-    model = os.getenv("GROQ_MODEL") or "llama-3.1-70b-versatile"
+        raise RuntimeError("Missing GROQ_API_KEY (env var or Streamlit secrets).")
+    return api_key, _groq_model()
+
+
+def _summarize_with_groq(prompt: str, api_key: str, model: str) -> Tuple[Optional[str], Optional[str]]:
     try:
         resp = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
@@ -354,122 +334,48 @@ def _summarize_with_groq(prompt: str) -> Tuple[Optional[str], Optional[str]]:
                 "temperature": 0.2,
                 "max_tokens": 400,
             },
-            timeout=30,
+            timeout=60,
         )
         resp.raise_for_status()
         data = resp.json()
         content = data.get("choices", [{}])[0].get("message", {}).get("content")
         return (content or "").strip(), f"groq:{model}"
-    except Exception:
+    except Exception as exc:
+        _LOG.warning("Groq summarize failed: %s", exc)
         return None, None
 
 
-def _summarize_with_hf(prompt: str) -> Tuple[Optional[str], Optional[str]]:
-    api_key = os.getenv("HF_API_KEY")
-    if not api_key:
-        return None, None
-    model = os.getenv("HF_MODEL") or "meta-llama/Meta-Llama-3-8B-Instruct"
-    url = f"https://api-inference.huggingface.co/models/{model}"
-    try:
-        resp = requests.post(
-            url,
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={
-                "inputs": f"{SYSTEM_PROMPT}\n\n{prompt}",
-                "parameters": {"max_new_tokens": 400, "temperature": 0.2},
-            },
-            timeout=60,
-        )
-        if resp.status_code == 503:
-            return None, None
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, list) and data:
-            content = data[0].get("generated_text")
-            return (content or "").strip(), f"hf:{model}"
-        return None, None
-    except Exception:
-        return None, None
-
-
-def _summarize_with_fallbacks(prompt: str) -> Tuple[Optional[str], Optional[str]]:
-    text, label = _summarize_with_hf(prompt)
-    if text:
-        return text, label
-    return None, None
-
-
-def _init_gemini():
-    api_key = os.getenv("GEMINI_API_KEY") or _read_streamlit_secret("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("Missing GEMINI_API_KEY (env var or Streamlit secrets).")
-    override_model = os.getenv("GEMINI_MODEL") or _read_streamlit_secret("GEMINI_MODEL")
-    try:
-        client = genai.Client(api_key=api_key)
-        return client, _pick_model(client, override_model)
-    except Exception:
-        try:
-            client = genai.Client(api_key=api_key)
-            return client, _pick_model(client, override_model)
-        except Exception:
-            client = genai.Client(api_key=api_key)
-            return client, _pick_model(client, override_model)
-
-
-def _summarize_chunks(client, chunks: Iterable[str], model_name: str) -> Tuple[List[str], Optional[str], str]:
+def _summarize_chunks(
+    chunks: Iterable[str], api_key: str, model: str
+) -> Tuple[List[str], Optional[str], str]:
     summaries: List[str] = []
-    used_labels = set()
+    used_labels: set[str] = set()
     for chunk in chunks:
         prompt = f"{SYSTEM_PROMPT}\n\nExcerpt:\n{chunk}"
-        try:
-            groq_text, groq_label = _summarize_with_groq(prompt)
-            if groq_text:
-                summaries.append(groq_text)
-                used_labels.add(groq_label or "groq")
-                continue
-            result = client.models.generate_content(model=model_name, contents=prompt)
-            summaries.append((result.text or "").strip())
-            used_labels.add(f"gemini:{model_name}")
-        except Exception as exc:
-            if _maybe_wait_on_quota(exc):
-                try:
-                    result = client.models.generate_content(model=model_name, contents=prompt)
-                    summaries.append((result.text or "").strip())
-                    used_labels.add(f"gemini:{model_name}")
-                    continue
-                except Exception as retry_exc:
-                    summaries.append(f"- Summary failed for a chunk ({retry_exc}).")
-                    continue
-            summaries.append(f"- Summary failed for a chunk ({exc}).")
+        text, label = _summarize_with_groq(prompt, api_key, model)
+        if text:
+            summaries.append(text)
+            used_labels.add(label or f"groq:{model}")
+        else:
+            summaries.append("- Summary failed for a chunk (Groq error).")
     combined = None
     if summaries:
         combo_prompt = (
             f"{SYSTEM_PROMPT}\n\nCombine these bullet summaries into a single, "
             f"concise bullet list:\n\n" + "\n".join(summaries)
         )
-        try:
-            groq_text, groq_label = _summarize_with_groq(combo_prompt)
-            if groq_text:
-                combined = groq_text
-                used_labels.add(groq_label or "groq")
-            else:
-                result = client.models.generate_content(model=model_name, contents=combo_prompt)
-                combined = (result.text or "").strip()
-                used_labels.add(f"gemini:{model_name}")
-        except Exception as exc:
-            if _maybe_wait_on_quota(exc):
-                try:
-                    result = client.models.generate_content(model=model_name, contents=combo_prompt)
-                    combined = (result.text or "").strip()
-                    used_labels.add(f"gemini:{model_name}")
-                except Exception:
-                    combined = None
-            else:
-                combined = None
+        text, label = _summarize_with_groq(combo_prompt, api_key, model)
+        if text:
+            combined = text
+            used_labels.add(label or f"groq:{model}")
     if not used_labels:
-        used_labels.add(f"gemini:{model_name}")
-    label = sorted(used_labels)
-    return summaries, combined, ", ".join(label) if len(label) == 1 else f"mixed:{', '.join(label)}"
+        used_labels.add(f"groq:{model}")
+    label_list = sorted(used_labels)
+    return (
+        summaries,
+        combined,
+        ", ".join(label_list) if len(label_list) == 1 else f"mixed:{', '.join(label_list)}",
+    )
 
 
 def run_sec_filing_pipeline(
@@ -486,11 +392,11 @@ def run_sec_filing_pipeline(
     _prune_old_filings(base_dir)
     dl = _create_downloader(base_dir)
     try:
-        client, model_name = _init_gemini()
+        api_key, model_name = _require_groq()
     except Exception as exc:
         return {"ok": False, "message": "", "log_lines": [], "error": str(exc)}
 
-    log_lines.append("Provider: Groq (primary) → Gemini (fallback)")
+    log_lines.append(f"Provider: Groq ({model_name})")
     for ticker in tickers:
         log_lines.append("")
         log_lines.append(_ticker_label(ticker))
@@ -518,7 +424,7 @@ def run_sec_filing_pipeline(
                     continue
 
                 chunks = _chunk_text(text)
-                summaries, combined, used_model = _summarize_chunks(client, chunks, model_name)
+                summaries, combined, used_model = _summarize_chunks(chunks, api_key, model_name)
                 summary_text = combined or "\n".join(summaries)
                 log_lines.append(f"    summarized — model: {used_model}")
                 db_manager.upsert_sec_summary(
@@ -665,7 +571,7 @@ def main() -> None:
         )
 
     st.caption(
-        "If Gemini rate limits or fails, Groq is used when configured. "
+        "Summaries use Groq (`GROQ_API_KEY`). "
         "Full summary text is stored in the database — use **Show history** below to read it."
     )
 
