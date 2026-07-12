@@ -74,7 +74,10 @@ def portfolio_ticker_universe() -> tuple[dict[str, str], dict[str, int]]:
         from services import db_manager
 
         manual = set(db_manager.get_held_stock_tickers())
-        plaid = set(db_manager.get_plaid_holdings_tickers())
+        if db_manager.get_hide_plaid():
+            plaid = set()
+        else:
+            plaid = set(db_manager.get_plaid_holdings_tickers())
     except Exception as exc:
         _LOG.warning("portfolio tickers unavailable for news digest: %s", exc)
         return {}, {"manual_distinct": 0, "plaid_distinct": 0, "unique_for_matching": 0}

@@ -79,6 +79,126 @@ def _ensure_accounts_timestamp_columns(c: sqlite3.Cursor) -> None:
 def get_connection():
     return sqlite3.connect(DATABASE)
 
+
+def get_app_setting(key: str, default: Optional[str] = None) -> Optional[str]:
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
+        row = cur.fetchone()
+    except sqlite3.OperationalError:
+        conn.close()
+        return default
+    conn.close()
+    if not row:
+        return default
+    return row[0]
+
+
+def set_app_setting(key: str, value: str) -> None:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO app_settings (key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (key, str(value)),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_hide_manual_entry() -> bool:
+    """When True (default), hide/disable in-app manual add/edit/delete for portfolio data."""
+    raw = get_app_setting("hide_manual_entry", "1")
+    if raw is None:
+        return True
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def set_hide_manual_entry(hidden: bool) -> None:
+    set_app_setting("hide_manual_entry", "1" if hidden else "0")
+
+
+def get_hide_plaid() -> bool:
+    """When True (default), hide Plaid UI and skip Plaid holdings in app views."""
+    raw = get_app_setting("hide_plaid", "1")
+    if raw is None:
+        return True
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def set_hide_plaid(hidden: bool) -> None:
+    set_app_setting("hide_plaid", "1" if hidden else "0")
+
+
+def get_hide_mutual_funds() -> bool:
+    """When True, hide mutual-fund holdings in UI only (rows stay in DB)."""
+    raw = get_app_setting("hide_mutual_funds", "0")
+    if raw is None:
+        return False
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def set_hide_mutual_funds(hidden: bool) -> None:
+    set_app_setting("hide_mutual_funds", "1" if hidden else "0")
+
+
+def get_hide_etfs() -> bool:
+    """When True, hide ETF holdings in UI only (rows stay in DB)."""
+    raw = get_app_setting("hide_etfs", "0")
+    if raw is None:
+        return False
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def set_hide_etfs(hidden: bool) -> None:
+    set_app_setting("hide_etfs", "1" if hidden else "0")
+
+
+def get_security_type(ticker: str) -> Optional[str]:
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return None
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT security_type FROM security_types WHERE ticker = ?",
+        (sym,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return str(row[0]) if row[0] else None
+
+
+def upsert_security_type(ticker: str, security_type: str, source: str = None, updated_at: str = None) -> None:
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return
+    kind = (security_type or "stock").strip().lower()
+    if kind not in {"stock", "etf", "mutual_fund"}:
+        kind = "stock"
+    when = updated_at or datetime.now(timezone.utc).isoformat()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO security_types (ticker, security_type, source, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(ticker) DO UPDATE SET
+            security_type = excluded.security_type,
+            source = excluded.source,
+            updated_at = excluded.updated_at
+        """,
+        (sym, kind, source, when),
+    )
+    conn.commit()
+    conn.close()
+
+
 # region Initialization
 def init_db():
     """Initializes the database and creates the table if it doesn't exist."""
@@ -133,50 +253,72 @@ def init_db():
             shares REAL NOT NULL
         )
     """)
-    # Add cost_basis column if it doesn't exist yet.
+    # Add cost_basis / brokerage / account columns if they don't exist yet.
     cur4.execute("PRAGMA table_info(Stocks)")
     stock_columns = [row[1] for row in cur4.fetchall()]
+    migrating_from_ticker_only = "brokerage" not in stock_columns
     if "cost_basis" not in stock_columns:
         cur4.execute("ALTER TABLE Stocks ADD COLUMN cost_basis REAL")
-    # Merge duplicate tickers before enforcing uniqueness.
+    if migrating_from_ticker_only:
+        # Legacy DBs enforced one row per ticker — merge before allowing multi-account rows.
+        cur4.execute("""
+            UPDATE Stocks
+            SET shares = (
+                SELECT SUM(s2.shares)
+                FROM Stocks s2
+                WHERE s2.ticker = Stocks.ticker
+            )
+            WHERE id IN (
+                SELECT MIN(id)
+                FROM Stocks
+                GROUP BY ticker
+            )
+        """)
+        cur4.execute("""
+            UPDATE Stocks
+            SET cost_basis = (
+                SELECT SUM(COALESCE(s2.cost_basis, 0))
+                FROM Stocks s2
+                WHERE s2.ticker = Stocks.ticker
+            )
+            WHERE id IN (
+                SELECT MIN(id)
+                FROM Stocks
+                GROUP BY ticker
+            )
+        """)
+        cur4.execute("""
+            DELETE FROM Stocks
+            WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM Stocks
+                GROUP BY ticker
+            )
+        """)
+        cur4.execute("ALTER TABLE Stocks ADD COLUMN brokerage TEXT")
+        cur4.execute("ALTER TABLE Stocks ADD COLUMN account TEXT")
+        cur4.execute(
+            """
+            UPDATE Stocks
+            SET brokerage = COALESCE(NULLIF(TRIM(brokerage), ''), 'Manual'),
+                account = COALESCE(NULLIF(TRIM(account), ''), 'Manage Stocks')
+            """
+        )
+        cur4.execute("DROP INDEX IF EXISTS idx_stocks_ticker")
+    else:
+        cur4.execute(
+            """
+            UPDATE Stocks
+            SET brokerage = COALESCE(NULLIF(TRIM(brokerage), ''), 'Manual'),
+                account = COALESCE(NULLIF(TRIM(account), ''), 'Manage Stocks')
+            WHERE brokerage IS NULL OR TRIM(brokerage) = ''
+               OR account IS NULL OR TRIM(account) = ''
+            """
+        )
+    # Unique per brokerage + account + ticker (CSV source of truth may split same ticker).
     cur4.execute("""
-        UPDATE Stocks
-        SET shares = (
-            SELECT SUM(s2.shares)
-            FROM Stocks s2
-            WHERE s2.ticker = Stocks.ticker
-        )
-        WHERE id IN (
-            SELECT MIN(id)
-            FROM Stocks
-            GROUP BY ticker
-        )
-    """)
-    cur4.execute("""
-        UPDATE Stocks
-        SET cost_basis = (
-            SELECT SUM(COALESCE(s2.cost_basis, 0))
-            FROM Stocks s2
-            WHERE s2.ticker = Stocks.ticker
-        )
-        WHERE id IN (
-            SELECT MIN(id)
-            FROM Stocks
-            GROUP BY ticker
-        )
-    """)
-    cur4.execute("""
-        DELETE FROM Stocks
-        WHERE id NOT IN (
-            SELECT MIN(id)
-            FROM Stocks
-            GROUP BY ticker
-        )
-    """)
-    # Enforce unique tickers to prevent duplicates going forward.
-    cur4.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_stocks_ticker
-        ON Stocks (ticker)
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_stocks_brokerage_account_ticker
+        ON Stocks (brokerage, account, ticker)
     """)
 
     cur5 = con.cursor()
@@ -426,6 +568,83 @@ def init_db():
             created_at_utc TEXT NOT NULL
         )
     """)
+
+    cur19 = con.cursor()
+    cur19.execute("""
+        CREATE TABLE IF NOT EXISTS covered_calls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            strike REAL NOT NULL,
+            expiration_date TEXT NOT NULL,
+            contracts INTEGER NOT NULL DEFAULT 1,
+            premium_received REAL NOT NULL DEFAULT 0,
+            open_date TEXT,
+            status TEXT NOT NULL DEFAULT 'open',
+            notes TEXT,
+            created_at_utc TEXT
+        )
+    """)
+    cur19.execute("PRAGMA table_info(covered_calls)")
+    cc_cols = {row[1] for row in cur19.fetchall()}
+    if "brokerage" not in cc_cols:
+        cur19.execute("ALTER TABLE covered_calls ADD COLUMN brokerage TEXT")
+    if "account" not in cc_cols:
+        cur19.execute("ALTER TABLE covered_calls ADD COLUMN account TEXT")
+    cur19.execute(
+        """
+        UPDATE covered_calls
+        SET brokerage = COALESCE(NULLIF(TRIM(brokerage), ''), 'Manual'),
+            account = COALESCE(NULLIF(TRIM(account), ''), 'Covered Calls')
+        WHERE brokerage IS NULL OR TRIM(brokerage) = ''
+           OR account IS NULL OR TRIM(account) = ''
+        """
+    )
+    cur19.execute("""
+        CREATE INDEX IF NOT EXISTS idx_covered_calls_status_exp
+        ON covered_calls (status, expiration_date)
+    """)
+
+    cur20 = con.cursor()
+    cur20.execute("""
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
+    cur20.execute(
+        """
+        INSERT OR IGNORE INTO app_settings (key, value)
+        VALUES ('hide_manual_entry', '1')
+        """
+    )
+    cur20.execute(
+        """
+        INSERT OR IGNORE INTO app_settings (key, value)
+        VALUES ('hide_plaid', '1')
+        """
+    )
+    cur20.execute(
+        """
+        INSERT OR IGNORE INTO app_settings (key, value)
+        VALUES ('hide_mutual_funds', '0')
+        """
+    )
+    cur20.execute(
+        """
+        INSERT OR IGNORE INTO app_settings (key, value)
+        VALUES ('hide_etfs', '0')
+        """
+    )
+    cur20.execute(
+        """
+        CREATE TABLE IF NOT EXISTS security_types (
+            ticker TEXT PRIMARY KEY,
+            security_type TEXT NOT NULL,
+            source TEXT,
+            updated_at TEXT
+        )
+        """
+    )
 
     con.commit()
     con.close()
@@ -866,7 +1085,14 @@ def get_plaid_holdings(institution_name=None):
     return df
 
 
-def wipe_all_data(force: bool = False):
+def wipe_all_data(force: bool = False, wipe_etf_sources: bool = False):
+    """
+    Clear local portfolio / market / news data.
+
+    Keeps ``app_settings`` always. ETF source registry (``etf_sources``) is kept
+    unless ``wipe_etf_sources=True``. Cached sector breakdown rows are cleared
+    with the rest of market caches either way.
+    """
     db_path = str(DATABASE)
     if not force and "test" not in db_path.lower():
         raise RuntimeError("Refusing to wipe non-test database without force=True.")
@@ -891,13 +1117,17 @@ def wipe_all_data(force: bool = False):
     _safe_delete("price_update_log")
     _safe_delete("benchmark_prices")
     _safe_delete("etf_sector_breakdown")
-    _safe_delete("etf_sources")
+    _safe_delete("security_types")
+    if wipe_etf_sources:
+        _safe_delete("etf_sources")
     _safe_delete("sec_filing_summaries")
     _safe_delete("client_error_log")
     _safe_delete("news_digest_articles")
     _safe_delete("home_insights_cache")
     _safe_delete("quant_backtest_runs")
     _safe_delete("quant_risk_snapshots")
+    _safe_delete("covered_calls")
+    # Keep app_settings (e.g. hide_manual_entry) across wipes.
     conn.commit()
     conn.close()
 
@@ -1877,6 +2107,8 @@ def get_stocks():
     query = """
         SELECT
             s.id,
+            COALESCE(NULLIF(TRIM(s.brokerage), ''), 'Manual') AS brokerage,
+            COALESCE(NULLIF(TRIM(s.account), ''), 'Manage Stocks') AS account,
             s.ticker,
             s.shares,
             COALESCE(s.cost_basis, 0) AS cost_basis,
@@ -1897,6 +2129,7 @@ def get_stocks():
         LEFT JOIN stock_prices sp
             ON sp.ticker = s.ticker
            AND sp.date = latest.max_date
+        ORDER BY brokerage, account, s.ticker
     """
     df = pd.read_sql_query(query, conn)
     conn.close()
@@ -1962,37 +2195,49 @@ def get_duplicate_stocks_df():
     return df
 
 def get_value_stocks():
+    """
+    Aggregated holdings with latest price (and position value).
+
+    Uses LEFT JOIN so tickers without a quote still appear. When price is
+    missing, position_value falls back to summed cost_basis (or 0).
+    """
     conn = get_connection()
-    # activeStocks = "SELECT id,ticker,shares FROM Stocks"
-    # activeStocksList = pd.read_sql_query(activeStocks, conn)
-
-    # getStockPrices = "SELECT ticker, date, closing_price FROM stock_prices"
-    # stockPricesList = pd.read_sql_query(getStockPrices, conn)
-
     query = """
         SELECT
             s.ticker,
             s.total_shares AS shares,
+            s.total_cost_basis,
             sp.date,
             sp.closing_price
         FROM (
-            SELECT ticker, SUM(shares) AS total_shares
+            SELECT
+                ticker,
+                SUM(shares) AS total_shares,
+                SUM(COALESCE(cost_basis, 0)) AS total_cost_basis
             FROM Stocks
             GROUP BY ticker
         ) s
-        JOIN stock_prices sp
-            ON s.ticker = sp.ticker
-        JOIN (
+        LEFT JOIN (
             SELECT ticker, MAX(date) AS max_date
             FROM stock_prices
             GROUP BY ticker
         ) latest
-            ON latest.ticker = sp.ticker
-           AND latest.max_date = sp.date
+            ON latest.ticker = s.ticker
+        LEFT JOIN stock_prices sp
+            ON sp.ticker = s.ticker
+           AND sp.date = latest.max_date
         """
     df = pd.read_sql_query(query, conn)
     conn.close()
-    df['position_value'] = df['shares'] * df['closing_price']
+    if df.empty:
+        return df
+    df = df.copy()
+    df["shares"] = pd.to_numeric(df["shares"], errors="coerce")
+    df["closing_price"] = pd.to_numeric(df["closing_price"], errors="coerce")
+    df["total_cost_basis"] = pd.to_numeric(df["total_cost_basis"], errors="coerce")
+    df["position_value"] = df["shares"] * df["closing_price"]
+    missing = df["position_value"].isna()
+    df.loc[missing, "position_value"] = df.loc[missing, "total_cost_basis"].fillna(0)
     return df
 
 def get_stock_prices_df():
@@ -2210,23 +2455,36 @@ def delete_orphan_stock_prices():
     conn.commit()
     conn.close()
 
-def insert_stock(ticker, shares, cost_basis=None):
+def insert_stock(ticker, shares, cost_basis=None, brokerage=None, account=None):
     """
     Insert a new stock record into the Stocks table.
     Returns the new stock's id.
     """
+    brokerage_val = (brokerage or "Manual").strip() or "Manual"
+    account_val = (account or "Manage Stocks").strip() or "Manage Stocks"
+    ticker_val = str(ticker).upper().strip()
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO Stocks (ticker, shares, cost_basis) VALUES (?, ?, ?)",
-        (ticker, shares, cost_basis),
+        """
+        INSERT INTO Stocks (ticker, shares, cost_basis, brokerage, account)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (ticker_val, shares, cost_basis, brokerage_val, account_val),
     )
     conn.commit()
     stock_id = cur.lastrowid
     conn.close()
     return stock_id
 
-def update_stock(stock_id, ticker=None, shares=None, cost_basis=None):
+def update_stock(
+    stock_id,
+    ticker=None,
+    shares=None,
+    cost_basis=None,
+    brokerage=None,
+    account=None,
+):
     """
     Update an existing stock record with the given id.
     """
@@ -2234,13 +2492,19 @@ def update_stock(stock_id, ticker=None, shares=None, cost_basis=None):
     params = []
     if ticker is not None:
         fields.append("ticker = ?")
-        params.append(ticker)
+        params.append(str(ticker).upper().strip())
     if shares is not None:
         fields.append("shares = ?")
         params.append(shares)
     if cost_basis is not None:
         fields.append("cost_basis = ?")
         params.append(cost_basis)
+    if brokerage is not None:
+        fields.append("brokerage = ?")
+        params.append(str(brokerage).strip() or "Manual")
+    if account is not None:
+        fields.append("account = ?")
+        params.append(str(account).strip() or "Manage Stocks")
     if not fields:
         return
     conn = get_connection()
@@ -2251,10 +2515,19 @@ def update_stock(stock_id, ticker=None, shares=None, cost_basis=None):
     conn.close()
 
 
-def upsert_stock_by_ticker(ticker, shares, cost_basis=None):
+def upsert_stock_by_ticker(ticker, shares, cost_basis=None, brokerage=None, account=None):
+    brokerage_val = (brokerage or "Manual").strip() or "Manual"
+    account_val = (account or "Manage Stocks").strip() or "Manage Stocks"
+    ticker_val = str(ticker).upper().strip()
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, cost_basis FROM Stocks WHERE ticker = ?", (ticker,))
+    cur.execute(
+        """
+        SELECT id, cost_basis FROM Stocks
+        WHERE ticker = ? AND brokerage = ? AND account = ?
+        """,
+        (ticker_val, brokerage_val, account_val),
+    )
     row = cur.fetchone()
     if row:
         stock_id = row[0]
@@ -2267,11 +2540,103 @@ def upsert_stock_by_ticker(ticker, shares, cost_basis=None):
         )
     else:
         cur.execute(
-            "INSERT INTO Stocks (ticker, shares, cost_basis) VALUES (?, ?, ?)",
-            (ticker, shares, cost_basis),
+            """
+            INSERT INTO Stocks (ticker, shares, cost_basis, brokerage, account)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (ticker_val, shares, cost_basis, brokerage_val, account_val),
         )
     conn.commit()
     conn.close()
+
+
+def replace_all_stocks(rows):
+    """
+    Wipe Stocks and insert rows. Each row: ticker, shares, optional cost_basis/brokerage/account.
+    Returns count inserted.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM Stocks")
+    inserted = 0
+    for row in rows:
+        ticker = str(row.get("ticker") or "").upper().strip()
+        if not ticker:
+            continue
+        shares = float(row.get("shares") or 0)
+        cost_basis = row.get("cost_basis")
+        if cost_basis is not None and cost_basis != "":
+            cost_basis = float(cost_basis)
+        else:
+            cost_basis = None
+        brokerage = (str(row.get("brokerage") or "Manual").strip() or "Manual")
+        account = (str(row.get("account") or "Manage Stocks").strip() or "Manage Stocks")
+        cur.execute(
+            """
+            INSERT INTO Stocks (ticker, shares, cost_basis, brokerage, account)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (ticker, shares, cost_basis, brokerage, account),
+        )
+        inserted += 1
+    conn.commit()
+    conn.close()
+    return inserted
+
+
+def replace_all_covered_calls(rows):
+    """
+    Wipe covered_calls and insert rows. Returns count inserted.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM covered_calls")
+    inserted = 0
+    created = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    for row in rows:
+        ticker = str(row.get("ticker") or "").upper().strip()
+        if not ticker:
+            continue
+        strike = float(row.get("strike"))
+        expiration_date = str(row.get("expiration_date") or "").strip()[:10]
+        contracts = int(row.get("contracts") or 1)
+        premium_received = float(row.get("premium_received") or 0)
+        open_date = row.get("open_date")
+        if open_date is not None and str(open_date).strip():
+            open_date = str(open_date).strip()[:10]
+        else:
+            open_date = None
+        status = (str(row.get("status") or "open").strip().lower() or "open")
+        notes = row.get("notes")
+        if notes is not None:
+            notes = str(notes).strip() or None
+        brokerage = str(row.get("brokerage") or "Manual").strip() or "Manual"
+        account = str(row.get("account") or "Covered Calls").strip() or "Covered Calls"
+        cur.execute(
+            """
+            INSERT INTO covered_calls
+                (ticker, strike, expiration_date, contracts, premium_received, open_date, status, notes,
+                 created_at_utc, brokerage, account)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                ticker,
+                strike,
+                expiration_date,
+                contracts,
+                premium_received,
+                open_date,
+                status,
+                notes,
+                created,
+                brokerage,
+                account,
+            ),
+        )
+        inserted += 1
+    conn.commit()
+    conn.close()
+    return inserted
 
 def delete_stock(stock_id):
     """
@@ -2426,14 +2791,235 @@ def get_realized_gains(year=None):
     return df
 
 
+def get_latest_stock_prices_map(tickers=None):
+    """Return {ticker: closing_price} for the most recent price row per ticker."""
+    conn = get_connection()
+    query = """
+        SELECT sp.ticker, sp.closing_price
+        FROM stock_prices sp
+        JOIN (
+            SELECT ticker, MAX(date) AS max_date
+            FROM stock_prices
+            GROUP BY ticker
+        ) latest
+            ON latest.ticker = sp.ticker
+           AND latest.max_date = sp.date
+    """
+    params = []
+    if tickers:
+        placeholders = ",".join("?" for _ in tickers)
+        query += f" WHERE sp.ticker IN ({placeholders})"
+        params = list(tickers)
+    cur = conn.cursor()
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    conn.close()
+    out = {}
+    for ticker, price in rows:
+        if ticker and price is not None:
+            out[str(ticker).upper()] = float(price)
+    return out
+
+
+def get_coverable_holdings_by_account(min_shares=100):
+    """
+    Holdings with at least ``min_shares`` (default 100) per account/brokerage.
+    Manual Manage Stocks rows use brokerage='Manual', account='Manage Stocks'.
+    """
+    rows = []
+    manual_df = get_stocks()
+    if not manual_df.empty:
+        for _, row in manual_df.iterrows():
+            shares = float(row.get("shares") or 0)
+            if shares >= min_shares:
+                rows.append(
+                    {
+                        "brokerage": row.get("brokerage") or "Manual",
+                        "account": row.get("account") or "Manage Stocks",
+                        "ticker": str(row.get("ticker") or "").upper(),
+                        "shares": shares,
+                        "coverable_lots": int(shares // min_shares),
+                        "uncovered_shares": int(shares % min_shares),
+                        "latest_price": row.get("latest_price"),
+                    }
+                )
+    plaid_df = get_plaid_holdings()
+    if not plaid_df.empty and not get_hide_plaid():
+        for _, row in plaid_df.iterrows():
+            shares = float(row.get("shares") or 0)
+            if shares >= min_shares:
+                rows.append(
+                    {
+                        "brokerage": row.get("institution_name") or "Plaid",
+                        "account": row.get("account_name") or row.get("account_id") or "Unknown",
+                        "ticker": str(row.get("ticker") or "").upper(),
+                        "shares": shares,
+                        "coverable_lots": int(shares // min_shares),
+                        "uncovered_shares": int(shares % min_shares),
+                        "latest_price": row.get("latest_price"),
+                    }
+                )
+    if not rows:
+        return pd.DataFrame(
+            columns=[
+                "brokerage",
+                "account",
+                "ticker",
+                "shares",
+                "coverable_lots",
+                "uncovered_shares",
+                "latest_price",
+            ]
+        )
+    df = pd.DataFrame(rows)
+    return df.sort_values(["brokerage", "account", "ticker"]).reset_index(drop=True)
+
+
+def insert_covered_call(
+    ticker,
+    strike,
+    expiration_date,
+    contracts=1,
+    premium_received=0,
+    open_date=None,
+    status="open",
+    notes=None,
+    brokerage=None,
+    account=None,
+):
+    conn = get_connection()
+    cur = conn.cursor()
+    created = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    brokerage_val = (brokerage or "Manual").strip() or "Manual"
+    account_val = (account or "Covered Calls").strip() or "Covered Calls"
+    cur.execute(
+        """
+        INSERT INTO covered_calls
+            (ticker, strike, expiration_date, contracts, premium_received, open_date, status, notes,
+             created_at_utc, brokerage, account)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            str(ticker).upper().strip(),
+            float(strike),
+            expiration_date,
+            int(contracts),
+            float(premium_received or 0),
+            open_date,
+            status or "open",
+            notes,
+            created,
+            brokerage_val,
+            account_val,
+        ),
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return new_id
+
+
+def update_covered_call(
+    call_id,
+    ticker=None,
+    strike=None,
+    expiration_date=None,
+    contracts=None,
+    premium_received=None,
+    open_date=None,
+    status=None,
+    notes=None,
+    brokerage=None,
+    account=None,
+):
+    fields = []
+    params = []
+    if ticker is not None:
+        fields.append("ticker = ?")
+        params.append(str(ticker).upper().strip())
+    if strike is not None:
+        fields.append("strike = ?")
+        params.append(float(strike))
+    if expiration_date is not None:
+        fields.append("expiration_date = ?")
+        params.append(expiration_date)
+    if contracts is not None:
+        fields.append("contracts = ?")
+        params.append(int(contracts))
+    if premium_received is not None:
+        fields.append("premium_received = ?")
+        params.append(float(premium_received))
+    if open_date is not None:
+        fields.append("open_date = ?")
+        params.append(open_date)
+    if status is not None:
+        fields.append("status = ?")
+        params.append(status)
+    if notes is not None:
+        fields.append("notes = ?")
+        params.append(notes)
+    if brokerage is not None:
+        fields.append("brokerage = ?")
+        params.append(str(brokerage).strip() or "Manual")
+    if account is not None:
+        fields.append("account = ?")
+        params.append(str(account).strip() or "Covered Calls")
+    if not fields:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    params.append(call_id)
+    cur.execute(f"UPDATE covered_calls SET {', '.join(fields)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+
+def delete_covered_call(call_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM covered_calls WHERE id = ?", (call_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_covered_calls(status=None):
+    conn = get_connection()
+    if status:
+        query = "SELECT * FROM covered_calls WHERE status = ? ORDER BY expiration_date, ticker"
+        df = pd.read_sql_query(query, conn, params=[status])
+    else:
+        query = "SELECT * FROM covered_calls ORDER BY expiration_date, ticker"
+        df = pd.read_sql_query(query, conn)
+    conn.close()
+    return df
+
+
 def get_all_tickers():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT ticker FROM Stocks")
+    cursor.execute("SELECT DISTINCT ticker FROM Stocks ORDER BY ticker")
     rows = cursor.fetchall()
     conn.close()
-    # Return a list of ticker strings
-    return [row[0] for row in rows]
+    return [row[0] for row in rows if row[0]]
+
+
+def get_tickers_missing_prices(tickers=None):
+    """Return held tickers that have no row in stock_prices."""
+    if tickers is None:
+        tickers = get_all_tickers()
+    held = [str(t).upper().strip() for t in tickers if t]
+    if not held:
+        return []
+    conn = get_connection()
+    cur = conn.cursor()
+    placeholders = ",".join("?" for _ in held)
+    cur.execute(
+        f"SELECT DISTINCT ticker FROM stock_prices WHERE ticker IN ({placeholders})",
+        held,
+    )
+    have = {str(r[0]).upper() for r in cur.fetchall()}
+    conn.close()
+    return [t for t in held if t not in have]
 
 def insert_stock_price(ticker, date, closing_price):
     conn = get_connection()

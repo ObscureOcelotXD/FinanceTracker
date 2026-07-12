@@ -53,6 +53,8 @@ def test_run_batch_skips_when_disabled(tmp_path, monkeypatch):
 
 def test_run_batch_calls_groq_and_stores(tmp_path, monkeypatch):
     import api.news_digest as nd
+    from datetime import datetime, timezone
+
     db_path = tmp_path / "t.db"
     db_manager.DATABASE = str(db_path)
     db_manager.init_db()
@@ -60,7 +62,7 @@ def test_run_batch_calls_groq_and_stores(tmp_path, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
     monkeypatch.setenv("NEWS_AI_MAX_ARTICLES_PER_RUN", "5")
 
-    now = "2026-06-15T12:00:00+00:00"
+    now = datetime.now(timezone.utc).isoformat()
     conn = sqlite3.connect(db_manager.DATABASE)
     conn.execute(
         """INSERT INTO news_digest_articles (
@@ -94,11 +96,13 @@ def test_run_batch_calls_groq_and_stores(tmp_path, monkeypatch):
 
 
 def test_list_pending_ai_respects_limit(tmp_path):
+    from datetime import datetime, timezone
+
     _init = tmp_path / "t.db"
     db_manager.DATABASE = str(_init)
     db_manager.init_db()
     conn = sqlite3.connect(db_manager.DATABASE)
-    now = "2026-06-15T12:00:00+00:00"
+    now = datetime.now(timezone.utc).isoformat()
     for i in range(5):
         conn.execute(
             """INSERT INTO news_digest_articles (

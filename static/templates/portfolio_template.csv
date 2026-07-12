@@ -1,0 +1,5 @@
+"type","brokerage","account","ticker","shares","cost_basis/premium","strike","expiration_date","contracts","open_date","status","notes"
+"stock","Schwab","Individual","SOFI",544,10169.21,"","","","","",""
+"stock","Fidelity","Rollover IRA","NVDA",100,14874.98,"","","","","",""
+"call","Schwab","Individual","SOFI","",88.67,24.0,"2026-09-18",2,"2026-07-01","open","Aug monthly"
+"call","Fidelity","Rollover IRA","NVDA","",167.34,260.0,"2026-08-28",1,"","open",""

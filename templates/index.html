@@ -30,7 +30,7 @@
             </div>
           </div>
 
-          <div class="neon-panel neon-slate mb-4">
+          <div class="neon-panel neon-slate mb-4" id="plaidHeroBanner" style="display: none;">
             <div class="neon-body">
               <div class="row g-3 align-items-center">
                 <div class="col-12 col-lg-8">
@@ -74,6 +74,14 @@
                     </button>
                   </div>
                   <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                    <a class="btn btn-outline-success btn-sm" href="/dashboard/stocks_covered_calls/">
+                      <i class="bi bi-currency-exchange me-1"></i>Covered Calls
+                    </a>
+                    <a class="btn btn-outline-success btn-sm" href="/dashboard/stocks_import/">
+                      <i class="bi bi-upload me-1"></i>Import CSV
+                    </a>
+                  </div>
+                  <div class="d-flex align-items-center gap-2 mb-3 flex-wrap" id="plaidHomeActions" style="display: none;">
                     <a class="btn btn-outline-light btn-sm" href="/plaid">
                       <i class="bi bi-bank2 me-1"></i>Plaid Management
                     </a>
@@ -376,7 +384,55 @@
                   <button id="wipeAllButton" class="btn btn-danger btn-sm">
                     <i class="bi bi-trash me-1"></i>Wipe All Data
                   </button>
-                  <small class="text-secondary ms-2">This clears local DB data only.</small>
+                  <small class="text-secondary ms-2">Clears local DB data. You will be asked whether to keep the ETF Source Registry.</small>
+                  <hr class="border-secondary my-4">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div>
+                      <h3 class="h6 mb-1">Hide manual entry</h3>
+                      <p class="text-secondary mb-0">When on, hides add/edit/delete forms in Stocks, Realized Gains, and Covered Calls. Use CSV import/export instead.</p>
+                    </div>
+                  </div>
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="hideManualEntryToggle" checked>
+                    <label class="form-check-label" for="hideManualEntryToggle">Hide manual entry (CSV-only mode)</label>
+                  </div>
+                  <div id="hideManualEntryStatus" class="text-secondary small mt-2">Manual entry hidden.</div>
+                  <hr class="border-secondary my-4">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div>
+                      <h3 class="h6 mb-1">Hide Plaid</h3>
+                      <p class="text-secondary mb-0">When on, hides Plaid Management, Plaid holdings views, and blocks Plaid API calls. CSV holdings stay available.</p>
+                    </div>
+                  </div>
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="hidePlaidToggle" checked>
+                    <label class="form-check-label" for="hidePlaidToggle">Hide Plaid features</label>
+                  </div>
+                  <div id="hidePlaidStatus" class="text-secondary small mt-2">Plaid features hidden.</div>
+                  <hr class="border-secondary my-4">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div>
+                      <h3 class="h6 mb-1">Hide mutual funds</h3>
+                      <p class="text-secondary mb-0">When on, hides mutual-fund tickers from Stocks UI charts and tables. Data stays in the database and CSV export.</p>
+                    </div>
+                  </div>
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="hideMutualFundsToggle">
+                    <label class="form-check-label" for="hideMutualFundsToggle">Hide mutual funds in UI</label>
+                  </div>
+                  <div id="hideMutualFundsStatus" class="text-secondary small mt-2">Mutual funds visible.</div>
+                  <hr class="border-secondary my-4">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div>
+                      <h3 class="h6 mb-1">Hide ETFs</h3>
+                      <p class="text-secondary mb-0">When on, hides ETF tickers from Stocks UI charts and tables. Data stays in the database and CSV export.</p>
+                    </div>
+                  </div>
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="hideEtfsToggle">
+                    <label class="form-check-label" for="hideEtfsToggle">Hide ETFs in UI</label>
+                  </div>
+                  <div id="hideEtfsStatus" class="text-secondary small mt-2">ETFs visible.</div>
                   <hr class="border-secondary my-4">
                   <div class="d-flex align-items-center justify-content-between mb-2">
                     <div>
@@ -472,13 +528,25 @@
   const wipeBtn = document.getElementById('wipeAllButton');
   if (wipeBtn) {
     wipeBtn.addEventListener('click', () => {
-      const ok = window.confirm('This will delete ALL local data (stocks, prices, Plaid items, accounts, transactions). Continue?');
+      const ok = window.confirm(
+        'This will delete ALL local data (stocks, prices, covered calls, Plaid items, accounts, transactions, news caches). Continue?'
+      );
       if (!ok) return;
-      fetch('/admin/wipe_all', { method: 'POST' })
+      const wipeEtf = window.confirm(
+        'Do you also want to delete the ETF Source Registry?\n\nChoose OK to delete it, or Cancel to keep your ETF source mappings.'
+      );
+      fetch('/admin/wipe_all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wipe_etf_sources: wipeEtf }),
+      })
         .then(response => response.json())
         .then(data => {
           if (data.status === 'ok') {
-            alert('All local data wiped.');
+            const etfNote = data.wipe_etf_sources
+              ? ' ETF Source Registry was also deleted.'
+              : ' ETF Source Registry was kept.';
+            alert('Local data wiped.' + etfNote);
             window.location.reload();
           } else {
             alert('Wipe failed: ' + (data.error || 'Unknown error'));
@@ -492,6 +560,148 @@
         });
     });
   }
+  const hideManualToggle = document.getElementById('hideManualEntryToggle');
+  const hideManualStatus = document.getElementById('hideManualEntryStatus');
+  function setHideManualStatus(hidden) {
+    if (!hideManualStatus) return;
+    hideManualStatus.textContent = hidden
+      ? 'Manual entry hidden — use Import CSV / export to edit portfolio data.'
+      : 'Manual add / edit / delete visible on Stocks pages.';
+  }
+  if (hideManualToggle) {
+    fetch('/admin/hide_manual_entry')
+      .then(r => r.json())
+      .then(data => {
+        const hidden = data.hide_manual_entry !== false;
+        hideManualToggle.checked = hidden;
+        setHideManualStatus(hidden);
+      })
+      .catch(() => setHideManualStatus(true));
+    hideManualToggle.addEventListener('change', () => {
+      const hidden = !!hideManualToggle.checked;
+      fetch('/admin/hide_manual_entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hide_manual_entry: hidden }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            alert('Could not save setting: ' + data.error);
+            return;
+          }
+          setHideManualStatus(!!data.hide_manual_entry);
+        })
+        .catch(err => {
+          if (typeof reportClientError === 'function') {
+            reportClientError('admin_hide_manual', 'Network or server error', err && err.message);
+          }
+          alert('Could not save setting. Please try again.');
+        });
+    });
+  }
+  const hidePlaidToggle = document.getElementById('hidePlaidToggle');
+  const hidePlaidStatus = document.getElementById('hidePlaidStatus');
+  function applyHidePlaidUi(hidden) {
+    const plaidHome = document.getElementById('plaidHomeActions');
+    const plaidHero = document.getElementById('plaidHeroBanner');
+    if (plaidHome) plaidHome.style.display = hidden ? 'none' : '';
+    if (plaidHero) plaidHero.style.display = hidden ? 'none' : '';
+    if (hidePlaidStatus) {
+      hidePlaidStatus.textContent = hidden
+        ? 'Plaid features hidden — use CSV holdings instead.'
+        : 'Plaid Management and linked holdings are visible.';
+    }
+  }
+  if (hidePlaidToggle) {
+    fetch('/admin/hide_plaid')
+      .then(r => r.json())
+      .then(data => {
+        const hidden = data.hide_plaid !== false;
+        hidePlaidToggle.checked = hidden;
+        applyHidePlaidUi(hidden);
+      })
+      .catch(() => applyHidePlaidUi(true));
+    hidePlaidToggle.addEventListener('change', () => {
+      const hidden = !!hidePlaidToggle.checked;
+      fetch('/admin/hide_plaid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hide_plaid: hidden }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            alert('Could not save setting: ' + data.error);
+            return;
+          }
+          applyHidePlaidUi(!!data.hide_plaid);
+        })
+        .catch(err => {
+          if (typeof reportClientError === 'function') {
+            reportClientError('admin_hide_plaid', 'Network or server error', err && err.message);
+          }
+          alert('Could not save setting. Please try again.');
+        });
+    });
+  }
+  function wireHideToggle(toggleId, statusId, endpoint, key, onText, offText) {
+    const toggle = document.getElementById(toggleId);
+    const status = document.getElementById(statusId);
+    function setStatus(hidden) {
+      if (!status) return;
+      status.textContent = hidden ? onText : offText;
+    }
+    if (!toggle) return;
+    fetch(endpoint)
+      .then(r => r.json())
+      .then(data => {
+        const hidden = !!data[key];
+        toggle.checked = hidden;
+        setStatus(hidden);
+      })
+      .catch(() => setStatus(false));
+    toggle.addEventListener('change', () => {
+      const hidden = !!toggle.checked;
+      const body = {};
+      body[key] = hidden;
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            alert('Could not save setting: ' + data.error);
+            return;
+          }
+          setStatus(!!data[key]);
+        })
+        .catch(err => {
+          if (typeof reportClientError === 'function') {
+            reportClientError('admin_' + key, 'Network or server error', err && err.message);
+          }
+          alert('Could not save setting. Please try again.');
+        });
+    });
+  }
+  wireHideToggle(
+    'hideMutualFundsToggle',
+    'hideMutualFundsStatus',
+    '/admin/hide_mutual_funds',
+    'hide_mutual_funds',
+    'Mutual funds hidden in Stocks UI (still in DB / CSV).',
+    'Mutual funds visible in Stocks UI.'
+  );
+  wireHideToggle(
+    'hideEtfsToggle',
+    'hideEtfsStatus',
+    '/admin/hide_etfs',
+    'hide_etfs',
+    'ETFs hidden in Stocks UI (still in DB / CSV).',
+    'ETFs visible in Stocks UI.'
+  );
   const bullBearStocksBtn = document.getElementById('bullBearStocksBtn');
   if (bullBearStocksBtn) {
     bullBearStocksBtn.addEventListener('click', () => {

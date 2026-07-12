@@ -188,6 +188,7 @@ def test_enrich_news_item_tags_lmt_from_summary_body(monkeypatch):
 
 
 def test_portfolio_ticker_universe_marks_manual_plaid_or_both(monkeypatch):
+    monkeypatch.setattr(db_manager, "get_hide_plaid", lambda: False)
     monkeypatch.setattr(db_manager, "get_held_stock_tickers", lambda: ["MSFT", "AAPL"])
     monkeypatch.setattr(db_manager, "get_plaid_holdings_tickers", lambda: ["MSFT", "GOOG"])
     uni, stats = nd.portfolio_ticker_universe()

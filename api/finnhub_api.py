@@ -11,6 +11,7 @@ except Exception:
     import polygon_api
 from services.db_manager import (
     get_all_tickers,
+    get_tickers_missing_prices,
     upsert_stock_price,
     get_last_update,
     set_last_update,
@@ -276,18 +277,29 @@ def get_sector_allocation_map(tickers, refresh_days: int = 7, force_refresh: boo
     return cached
 
 def update_stock_prices(forceUpdate: bool = False):
-    tickers = get_all_tickers()  # e.g., returns a list like ["AAPL", "MSFT", "GOOG", ...]
+    tickers = get_all_tickers()  # distinct held tickers
     today = datetime.date.today().isoformat()
 
     last_run = get_last_update()
+    missing = get_tickers_missing_prices(tickers)
     if last_run == today and not forceUpdate:
-        print("[Finnhub] Update already performed today. Skipping update.")
+        if not missing:
+            print("[Finnhub] Update already performed today. Skipping update.")
+            return
+        # New holdings imported after today's run still need quotes.
+        print(
+            f"[Finnhub] Already ran today, but {len(missing)} ticker(s) lack prices — fetching those."
+        )
+        tickers = missing
+
+    if not tickers:
+        print("[Finnhub] No tickers to update.")
         return
 
     # Fetch prices concurrently using Finnhub
     print(f"[Finnhub] Fetching prices for {len(tickers)} tickers on {today}...")
     batch_prices = fetch_stock_prices_batch(tickers)
-    
+
     for ticker in tickers:
         price = batch_prices.get(ticker)
         if price is not None:

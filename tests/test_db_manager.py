@@ -188,9 +188,19 @@ def test_wipe_all_data_clears_tables(tmp_path):
         fees=0.0,
         tax_year=2025,
     )
+    db_manager.upsert_etf_source("VTI", "yahoo_top_holdings", url="https://example.com/vti")
     db_manager.wipe_all_data()
     assert db_manager.get_stocks().empty
     assert db_manager.get_realized_gains().empty
+    # ETF registry kept by default
+    assert not db_manager.get_etf_sources().empty
+
+
+def test_wipe_all_data_can_clear_etf_sources(tmp_path):
+    _init_temp_db(tmp_path)
+    db_manager.upsert_etf_source("VTI", "yahoo_top_holdings", url="https://example.com/vti")
+    db_manager.wipe_all_data(wipe_etf_sources=True)
+    assert db_manager.get_etf_sources().empty
 
 
 def test_plaid_helpers_use_configured_database_path(tmp_path, monkeypatch):
@@ -472,8 +482,11 @@ def test_quant_backtest_runs_filtered(tmp_path):
 def test_prune_sec_filing_summaries_keeps_recent_deletes_old(tmp_path):
     _init_temp_db(tmp_path)
     conn = sqlite3.connect(db_manager.DATABASE)
-    old = "2020-01-01T00:00:00+00:00"
-    new = "2025-06-15T12:00:00+00:00"
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    old = (now - timedelta(days=400)).isoformat()
+    new = (now - timedelta(days=10)).isoformat()
     conn.execute(
         """
         INSERT INTO sec_filing_summaries

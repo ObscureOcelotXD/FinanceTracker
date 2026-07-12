@@ -1,0 +1,3 @@
+brokerage,account,ticker,strike,expiration_date,contracts,premium_received,open_date,status,notes
+Schwab,IRA,AAPL,220,2026-08-15,2,450,2026-07-01,open,Aug monthly
+Fidelity,Taxable,MSFT,450,2026-07-18,1,180,2026-06-20,open,

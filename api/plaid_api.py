@@ -20,6 +20,14 @@ from services import db_manager
 _LOG = logging.getLogger(__name__)
 
 plaid_bp = Blueprint('plaid_api', __name__)
+
+
+@plaid_bp.before_request
+def _block_plaid_when_hidden():
+    if db_manager.get_hide_plaid():
+        return jsonify({"error": "Plaid is disabled in admin settings."}), 403
+
+
 #region Plaid API Configuration
 
 

@@ -51,6 +51,24 @@ dash_app.layout = html.Div([
                         active="exact",
                         className="nav-pill",
                     ),
+                    dbc.NavLink(
+                        [
+                            html.I(className="bi bi-currency-exchange nav-icon"),
+                            html.Span("Covered Calls", className="nav-text"),
+                        ],
+                        href="/dashboard/stocks_covered_calls",
+                        active="exact",
+                        className="nav-pill",
+                    ),
+                    dbc.NavLink(
+                        [
+                            html.I(className="bi bi-upload nav-icon"),
+                            html.Span("Import", className="nav-text"),
+                        ],
+                        href="/dashboard/stocks_import",
+                        active="exact",
+                        className="nav-pill",
+                    ),
                 ],
                 className="ms-auto nav-neon-group",
                 navbar=True,
@@ -73,3 +91,5 @@ import dashPages.accounts_dash as accountsDash
 import dashPages.stocks_dash as stocksDash
 import dashPages.stocks_manage as stocksManage
 import dashPages.stocks_realized as stocksRealized
+import dashPages.stocks_covered_calls as stocksCoveredCalls
+import dashPages.stocks_import as stocksImport

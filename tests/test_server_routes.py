@@ -31,6 +31,104 @@ def test_index_returns_200(client):
     assert b"Today's news" in r.data
     assert b"Refresh insights" in r.data
     assert b"View all news" in r.data
+    assert b"Covered Calls" in r.data
+    assert b"Import CSV" in r.data
+    assert b"hideManualEntryToggle" in r.data
+    assert b"hidePlaidToggle" in r.data
+    assert b"hideMutualFundsToggle" in r.data
+    assert b"hideEtfsToggle" in r.data
+
+
+def test_admin_hide_manual_entry_default_and_toggle(client):
+    r = client.get("/admin/hide_manual_entry")
+    assert r.status_code == 200
+    assert r.get_json()["hide_manual_entry"] is True
+
+    r2 = client.post("/admin/hide_manual_entry", json={"hide_manual_entry": False})
+    assert r2.status_code == 200
+    assert r2.get_json()["hide_manual_entry"] is False
+
+    r3 = client.get("/admin/hide_manual_entry")
+    assert r3.get_json()["hide_manual_entry"] is False
+
+    r4 = client.post("/admin/hide_manual_entry", json={"hide_manual_entry": True})
+    assert r4.get_json()["hide_manual_entry"] is True
+
+
+def test_admin_hide_plaid_default_and_toggle(client):
+    r = client.get("/admin/hide_plaid")
+    assert r.status_code == 200
+    assert r.get_json()["hide_plaid"] is True
+
+    r2 = client.post("/admin/hide_plaid", json={"hide_plaid": False})
+    assert r2.status_code == 200
+    assert r2.get_json()["hide_plaid"] is False
+
+    r3 = client.get("/admin/hide_plaid")
+    assert r3.get_json()["hide_plaid"] is False
+
+
+def test_admin_hide_mutual_funds_and_etfs_toggles(client):
+    r = client.get("/admin/hide_mutual_funds")
+    assert r.status_code == 200
+    assert r.get_json()["hide_mutual_funds"] is False
+
+    r2 = client.post("/admin/hide_mutual_funds", json={"hide_mutual_funds": True})
+    assert r2.status_code == 200
+    assert r2.get_json()["hide_mutual_funds"] is True
+
+    r3 = client.get("/admin/hide_etfs")
+    assert r3.status_code == 200
+    assert r3.get_json()["hide_etfs"] is False
+
+    r4 = client.post("/admin/hide_etfs", json={"hide_etfs": True})
+    assert r4.status_code == 200
+    assert r4.get_json()["hide_etfs"] is True
+
+    r5 = client.get("/admin/security_types")
+    assert r5.status_code == 200
+    body = r5.get_json()
+    assert "counts" in body
+    assert "types" in body
+
+
+def test_export_holdings_and_calls_csv(client, temp_db):
+    from services import db_manager
+
+    db_manager.replace_all_stocks(
+        [{"brokerage": "Manual", "account": "Manage Stocks", "ticker": "MSFT", "shares": 10, "cost_basis": 100}]
+    )
+    db_manager.replace_all_covered_calls(
+        [
+            {
+                "ticker": "MSFT",
+                "strike": 400,
+                "expiration_date": "2026-08-15",
+                "contracts": 1,
+                "premium_received": 20,
+            }
+        ]
+    )
+    h = client.get("/api/export/holdings.csv")
+    assert h.status_code == 200
+    assert b"MSFT" in h.data
+    assert "attachment" in h.headers.get("Content-Disposition", "")
+
+    c = client.get("/api/export/covered_calls.csv")
+    assert c.status_code == 200
+    assert b"MSFT" in c.data
+
+    p = client.get("/api/export/portfolio.csv")
+    assert p.status_code == 200
+    assert b"type" in p.data
+    assert b"stock" in p.data
+    assert b"call" in p.data
+    assert b"MSFT" in p.data
+    assert "portfolio.csv" in p.headers.get("Content-Disposition", "")
+
+    z = client.get("/api/export/portfolio.zip")
+    assert z.status_code == 200
+    assert z.data[:2] == b"PK"
 
 
 def test_api_home_insights_returns_json(client):
@@ -95,10 +193,22 @@ def test_support_returns_200(client):
 
 
 def test_plaid_management_page_returns_200(client):
+    from services import db_manager
+
+    db_manager.set_hide_plaid(False)
     r = client.get("/plaid")
     assert r.status_code == 200
     assert b"Plaid Management" in r.data
     assert b"plaid-management.js" in r.data
+
+
+def test_plaid_management_redirects_when_hidden(client):
+    from services import db_manager
+
+    db_manager.set_hide_plaid(True)
+    r = client.get("/plaid")
+    assert r.status_code == 302
+    assert r.headers["Location"].endswith("/")
 
 
 def test_favicon_returns_204(client):
@@ -123,13 +233,35 @@ def test_admin_wipe_all_returns_ok(client, monkeypatch):
     import server
 
     captured = {}
-    monkeypatch.setattr(server.db_manager, "wipe_all_data", lambda force=False: captured.setdefault("force", force))
 
-    r = client.post("/admin/wipe_all")
+    def _wipe(force=False, wipe_etf_sources=False):
+        captured["force"] = force
+        captured["wipe_etf_sources"] = wipe_etf_sources
+
+    monkeypatch.setattr(server.db_manager, "wipe_all_data", _wipe)
+
+    r = client.post("/admin/wipe_all", json={"wipe_etf_sources": True})
 
     assert r.status_code == 200
-    assert r.get_json() == {"status": "ok"}
+    assert r.get_json() == {"status": "ok", "wipe_etf_sources": True}
     assert captured["force"] is True
+    assert captured["wipe_etf_sources"] is True
+
+
+def test_admin_wipe_all_keeps_etf_by_default(client, monkeypatch):
+    import server
+
+    captured = {}
+
+    def _wipe(force=False, wipe_etf_sources=False):
+        captured["wipe_etf_sources"] = wipe_etf_sources
+
+    monkeypatch.setattr(server.db_manager, "wipe_all_data", _wipe)
+
+    r = client.post("/admin/wipe_all", json={})
+    assert r.status_code == 200
+    assert r.get_json()["wipe_etf_sources"] is False
+    assert captured["wipe_etf_sources"] is False
 
 
 def test_admin_get_etf_sources_returns_sorted_items(client, monkeypatch):

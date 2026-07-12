@@ -8,6 +8,7 @@ from flask import (
     url_for,
     got_request_exception,
     has_request_context,
+    Response,
 )
 import os
 import logging
@@ -104,6 +105,13 @@ def create_flask_app():
     app.config['TEMPLATES_AUTO_RELOAD'] = True
     app.jinja_env.auto_reload = True
 
+    try:
+        from api.portfolio_import import ensure_template_files
+
+        ensure_template_files()
+    except Exception:
+        logging.exception("Could not write portfolio CSV templates")
+
     if _env_truthy("TRUST_PROXY_HEADERS"):
         from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -134,6 +142,8 @@ def create_flask_app():
 
     @app.route("/plaid")
     def plaid_management():
+        if db_manager.get_hide_plaid():
+            return redirect(url_for("index"))
         resp = make_response(render_template("plaid.html", public_app=_public_app_context()))
         resp.headers["Cache-Control"] = "no-store"
         return resp
@@ -193,9 +203,157 @@ def create_flask_app():
 
     @app.route('/admin/wipe_all', methods=['POST'])
     def admin_wipe_all():
+        data = request.get_json(silent=True) or {}
+        raw = data.get("wipe_etf_sources", False)
+        wipe_etf = raw is True or str(raw).strip().lower() in {"1", "true", "yes", "on"}
         try:
-            db_manager.wipe_all_data(force=True)
-            return jsonify({"status": "ok"})
+            db_manager.wipe_all_data(force=True, wipe_etf_sources=wipe_etf)
+            return jsonify({"status": "ok", "wipe_etf_sources": wipe_etf})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/admin/hide_manual_entry', methods=['GET'])
+    def admin_get_hide_manual_entry():
+        try:
+            return jsonify({"hide_manual_entry": db_manager.get_hide_manual_entry()})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/admin/hide_manual_entry', methods=['POST'])
+    def admin_set_hide_manual_entry():
+        data = request.get_json(silent=True) or {}
+        if "hide_manual_entry" not in data:
+            return jsonify({"error": "Missing hide_manual_entry"}), 400
+        raw = data.get("hide_manual_entry")
+        hidden = raw is True or str(raw).strip().lower() in {"1", "true", "yes", "on"}
+        try:
+            db_manager.set_hide_manual_entry(hidden)
+            return jsonify({"status": "ok", "hide_manual_entry": db_manager.get_hide_manual_entry()})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/admin/hide_plaid', methods=['GET'])
+    def admin_get_hide_plaid():
+        try:
+            return jsonify({"hide_plaid": db_manager.get_hide_plaid()})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/admin/hide_plaid', methods=['POST'])
+    def admin_set_hide_plaid():
+        data = request.get_json(silent=True) or {}
+        if "hide_plaid" not in data:
+            return jsonify({"error": "Missing hide_plaid"}), 400
+        raw = data.get("hide_plaid")
+        hidden = raw is True or str(raw).strip().lower() in {"1", "true", "yes", "on"}
+        try:
+            db_manager.set_hide_plaid(hidden)
+            return jsonify({"status": "ok", "hide_plaid": db_manager.get_hide_plaid()})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/admin/hide_mutual_funds', methods=['GET'])
+    def admin_get_hide_mutual_funds():
+        try:
+            return jsonify({"hide_mutual_funds": db_manager.get_hide_mutual_funds()})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/admin/hide_mutual_funds', methods=['POST'])
+    def admin_set_hide_mutual_funds():
+        data = request.get_json(silent=True) or {}
+        if "hide_mutual_funds" not in data:
+            return jsonify({"error": "Missing hide_mutual_funds"}), 400
+        raw = data.get("hide_mutual_funds")
+        hidden = raw is True or str(raw).strip().lower() in {"1", "true", "yes", "on"}
+        try:
+            db_manager.set_hide_mutual_funds(hidden)
+            return jsonify({"status": "ok", "hide_mutual_funds": db_manager.get_hide_mutual_funds()})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/admin/hide_etfs', methods=['GET'])
+    def admin_get_hide_etfs():
+        try:
+            return jsonify({"hide_etfs": db_manager.get_hide_etfs()})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/admin/hide_etfs', methods=['POST'])
+    def admin_set_hide_etfs():
+        data = request.get_json(silent=True) or {}
+        if "hide_etfs" not in data:
+            return jsonify({"error": "Missing hide_etfs"}), 400
+        raw = data.get("hide_etfs")
+        hidden = raw is True or str(raw).strip().lower() in {"1", "true", "yes", "on"}
+        try:
+            db_manager.set_hide_etfs(hidden)
+            return jsonify({"status": "ok", "hide_etfs": db_manager.get_hide_etfs()})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/admin/security_types', methods=['GET'])
+    def admin_get_security_types():
+        try:
+            from api import security_type as st
+
+            return jsonify(st.security_type_summary())
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/api/export/holdings.csv', methods=['GET'])
+    def export_holdings_csv():
+        try:
+            from api import portfolio_import as pi
+
+            body = pi.export_holdings_csv()
+            return Response(
+                body,
+                mimetype="text/csv",
+                headers={"Content-Disposition": "attachment; filename=holdings.csv"},
+            )
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/api/export/covered_calls.csv', methods=['GET'])
+    def export_covered_calls_csv():
+        try:
+            from api import portfolio_import as pi
+
+            body = pi.export_covered_calls_csv()
+            return Response(
+                body,
+                mimetype="text/csv",
+                headers={"Content-Disposition": "attachment; filename=covered_calls.csv"},
+            )
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/api/export/portfolio.csv', methods=['GET'])
+    def export_portfolio_csv():
+        try:
+            from api import portfolio_import as pi
+
+            body = pi.export_portfolio_csv()
+            return Response(
+                body,
+                mimetype="text/csv",
+                headers={"Content-Disposition": "attachment; filename=portfolio.csv"},
+            )
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/api/export/portfolio.zip', methods=['GET'])
+    def export_portfolio_zip():
+        try:
+            from api import portfolio_import as pi
+
+            body = pi.export_portfolio_zip_bytes()
+            return Response(
+                body,
+                mimetype="application/zip",
+                headers={"Content-Disposition": "attachment; filename=portfolio_export.zip"},
+            )
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
 

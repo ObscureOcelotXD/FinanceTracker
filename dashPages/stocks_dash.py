@@ -12,6 +12,25 @@ dash.register_page(__name__, path="/stocks_dash", name="Display")
 
 dash_app = get_app()
 
+# One auto-fetch per process when holdings lack quotes (avoids interval hammering).
+_missing_price_fetch_attempted = False
+
+
+def _ensure_missing_prices_fetched():
+    """If any held ticker has no price yet, fetch quotes once this process."""
+    global _missing_price_fetch_attempted
+    if _missing_price_fetch_attempted:
+        return
+    _missing_price_fetch_attempted = True
+    try:
+        missing = db_manager.get_tickers_missing_prices()
+        if not missing:
+            return
+        print(f"[Dashboard] Auto-fetching prices for {len(missing)} ticker(s) without quotes.")
+        finnhub_api.update_stock_prices(forceUpdate=False)
+    except Exception as exc:
+        print(f"[Dashboard] Auto price fetch failed: {exc}")
+
 def _normalize_price_df(df):
     if df.empty:
         return df
@@ -35,16 +54,19 @@ def _merge_monthly_first_trading_day(df):
 def _value_chart(df, chart_type):
     if df.empty:
         return px.bar(title="No Data Available", template="plotly_dark")
+    chart_df = df[df["position_value"].fillna(0) > 0].copy()
+    if chart_df.empty:
+        return px.bar(title="No priced holdings yet — try Refresh Prices", template="plotly_dark")
     if chart_type == "treemap":
         fig = px.treemap(
-            df,
+            chart_df,
             path=["ticker"],
             values="position_value",
             title="Your Stock Values (Treemap)",
         )
     else:
         fig = px.bar(
-            df,
+            chart_df,
             x="ticker",
             y="position_value",
             title="Your Stock Values",
@@ -56,9 +78,12 @@ def _value_chart(df, chart_type):
 def _allocation_chart(df, chart_type):
     if df.empty:
         return px.pie(title="No Data Available", template="plotly_dark")
+    chart_df = df[df["position_value"].fillna(0) > 0].copy()
+    if chart_df.empty:
+        return px.pie(title="No priced holdings yet — try Refresh Prices", template="plotly_dark")
     hole = 0.5 if chart_type == "donut" else 0
     fig = px.pie(
-        df,
+        chart_df,
         names="ticker",
         values="position_value",
         title="Allocation",
@@ -123,7 +148,10 @@ def _historical_chart(df, tickers, chart_type, start_date, end_date):
     Input("allocation-chart-type", "value"),
 )
 def update_value_graphs(n_intervals, store_data, value_chart_type, allocation_chart_type):
-    df = db_manager.get_value_stocks()
+    from api import security_type as st
+
+    _ensure_missing_prices_fetched()
+    df = st.filter_holdings_df_for_ui(db_manager.get_value_stocks())
     return _value_chart(df, value_chart_type), _allocation_chart(df, allocation_chart_type)
 
 @dash_app.callback(
@@ -132,14 +160,19 @@ def update_value_graphs(n_intervals, store_data, value_chart_type, allocation_ch
     Input("stocks-store-display", "data"),
 )
 def update_sector_chart(n_intervals, store_data):
-    df = db_manager.get_value_stocks()
+    from api import security_type as st
+
+    df = st.filter_holdings_df_for_ui(db_manager.get_value_stocks())
     if df.empty:
         return px.pie(title="No Data Available", template="plotly_dark")
-    tickers = df["ticker"].tolist()
+    chart_df = df[df["position_value"].fillna(0) > 0].copy()
+    if chart_df.empty:
+        return px.pie(title="No priced holdings yet — try Refresh Prices", template="plotly_dark")
+    tickers = chart_df["ticker"].tolist()
     sector_map = finnhub_api.get_sector_allocation_map(tickers)
-    df["sector"] = df["ticker"].map(sector_map).fillna("Unknown")
-    sector_df = df.groupby("sector", as_index=False)["position_value"].sum()
-    ticker_df = df.groupby("sector")["ticker"].apply(lambda x: ", ".join(sorted(set(x)))).reset_index()
+    chart_df["sector"] = chart_df["ticker"].map(sector_map).fillna("Unknown")
+    sector_df = chart_df.groupby("sector", as_index=False)["position_value"].sum()
+    ticker_df = chart_df.groupby("sector")["ticker"].apply(lambda x: ", ".join(sorted(set(x)))).reset_index()
     sector_df = sector_df.merge(ticker_df, on="sector", how="left")
     fig = px.pie(
         sector_df,
@@ -162,7 +195,9 @@ def update_sector_chart(n_intervals, store_data):
     Input("stocks-store-display", "data"),
 )
 def update_total_net_worth(n_intervals, store_data):
-    df = db_manager.get_value_stocks()
+    from api import security_type as st
+
+    df = st.filter_holdings_df_for_ui(db_manager.get_value_stocks())
     total_value = df["position_value"].sum() if not df.empty else 0
     return html.Span(
         [
@@ -481,7 +516,14 @@ layout = html.Div(
     Input("stocks-date-range", "end_date"),
 )
 def update_historical_chart(n_intervals, store_data, tickers, chart_type, start_date, end_date):
+    from api import security_type as st
+
     df = db_manager.get_stock_prices_df()
+    if not df.empty:
+        allowed = set(st.filter_tickers_for_ui(df["ticker"].astype(str).unique().tolist()))
+        df = df[df["ticker"].isin(allowed)]
+        if tickers:
+            tickers = [t for t in tickers if t in allowed]
     return _historical_chart(df, tickers, chart_type, start_date, end_date)
 
 

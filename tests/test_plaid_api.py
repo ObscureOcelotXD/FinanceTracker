@@ -13,6 +13,7 @@ def temp_db(tmp_path):
 
     db_manager.DATABASE = str(tmp_path / "test_finance_data.db")
     db_manager.init_db()
+    db_manager.set_hide_plaid(False)
     return db_manager.DATABASE
 
 
@@ -200,6 +201,15 @@ def test_plaid_items_list_empty(client):
     r = client.get("/plaid/items")
     assert r.status_code == 200
     assert r.get_json() == {"items": []}
+
+
+def test_plaid_api_blocked_when_hidden(client):
+    from services import db_manager
+
+    db_manager.set_hide_plaid(True)
+    r = client.get("/plaid/items")
+    assert r.status_code == 403
+    assert "disabled" in r.get_json()["error"].lower()
 
 
 def test_plaid_disconnect_requires_item_id(client):

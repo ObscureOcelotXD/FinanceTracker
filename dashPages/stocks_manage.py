@@ -151,6 +151,7 @@ dash.register_page(
                                             ),
                                             width="auto",
                                         ),
+                                        id="manage-manual-add-section",
                                     ),
                                     html.Div(
                                         [
@@ -320,6 +321,16 @@ dash.register_page(
                                             row_deletable=True,
                                             row_selectable=False,
                                             columns=[
+                                                {
+                                                    "name": "Brokerage",
+                                                    "id": "brokerage",
+                                                    "editable": True,
+                                                },
+                                                {
+                                                    "name": "Account",
+                                                    "id": "account",
+                                                    "editable": True,
+                                                },
                                                 {
                                                     "name": "Ticker",
                                                     "id": "ticker",
@@ -593,7 +604,8 @@ dash.register_page(
                     xs=12,
                     lg=10,
                     className="mx-auto",
-                )
+                ),
+                id="manage-plaid-section",
             ),
         ],
         fluid=True,
@@ -618,7 +630,34 @@ def _norm_cost_basis(val):
     return float(val)
 
 
-@dash.callback(
+dash_app = dash.get_app()
+
+
+@dash_app.callback(
+    Output("manage-manual-add-section", "style"),
+    Output("stocks-table", "editable"),
+    Output("stocks-table", "row_deletable"),
+    Input("interval-component", "n_intervals"),
+    Input("stocks-store", "data"),
+)
+def manage_sync_manual_entry_visibility(_n, _store):
+    if db_manager.get_hide_manual_entry():
+        return {"display": "none"}, False, False
+    return {}, True, True
+
+
+@dash_app.callback(
+    Output("manage-plaid-section", "style"),
+    Input("interval-component", "n_intervals"),
+    Input("stocks-store", "data"),
+)
+def manage_sync_plaid_visibility(_n, _store):
+    if db_manager.get_hide_plaid():
+        return {"display": "none"}
+    return {}
+
+
+@dash_app.callback(
     Output("stocks-table", "data", allow_duplicate=True),
     Input("stocks-add-row", "n_clicks"),
     State("stocks-table", "data"),
@@ -627,8 +666,12 @@ def _norm_cost_basis(val):
 def add_draft_row(n_clicks, data):
     if not n_clicks:
         raise PreventUpdate
+    if db_manager.get_hide_manual_entry():
+        raise PreventUpdate
     draft = {
         "id": None,
+        "brokerage": "Manual",
+        "account": "Manage Stocks",
         "ticker": "",
         "shares": None,
         "cost_basis": None,
@@ -639,7 +682,7 @@ def add_draft_row(n_clicks, data):
     return [draft] + list(data or [])
 
 
-@dash.callback(
+@dash_app.callback(
     Output("stocks-store", "data", allow_duplicate=True),
     Output("stocks-table-feedback", "children"),
     Output("stocks-table-feedback", "is_open"),
@@ -653,6 +696,8 @@ def add_draft_row(n_clicks, data):
 )
 def sync_stocks_from_table(_ts, prev, current, store_data):
     if prev is None or current is None:
+        raise PreventUpdate
+    if db_manager.get_hide_manual_entry():
         raise PreventUpdate
 
     prev_by_id = {}
@@ -693,7 +738,11 @@ def sync_stocks_from_table(_ts, prev, current, store_data):
                 errors.append(sym_msg)
                 continue
             cb = _norm_cost_basis(dr.get("cost_basis"))
-            db_manager.insert_stock(t, sh_val, cost_basis=cb)
+            brokerage = (dr.get("brokerage") or "Manual").strip() or "Manual"
+            account = (dr.get("account") or "Manage Stocks").strip() or "Manage Stocks"
+            db_manager.insert_stock(
+                t, sh_val, cost_basis=cb, brokerage=brokerage, account=account
+            )
             inserted += 1
         except Exception as exc:
             errors.append(str(exc))
@@ -740,13 +789,17 @@ def sync_stocks_from_table(_ts, prev, current, store_data):
                 False,
             )
         ncb = _norm_cost_basis(new_row.get("cost_basis"))
+        nb = (new_row.get("brokerage") or "Manual").strip() or "Manual"
+        na = (new_row.get("account") or "Manage Stocks").strip() or "Manage Stocks"
         ot = (old.get("ticker") or "").strip().upper()
         try:
             os_ = float(old.get("shares"))
         except (TypeError, ValueError):
             os_ = None
         ocb = _norm_cost_basis(old.get("cost_basis"))
-        if nt != ot or ns != os_ or ncb != ocb:
+        ob = (old.get("brokerage") or "Manual").strip() or "Manual"
+        oa = (old.get("account") or "Manage Stocks").strip() or "Manage Stocks"
+        if nt != ot or ns != os_ or ncb != ocb or nb != ob or na != oa:
             if nt != ot:
                 ok_sym, sym_msg = finnhub_api.validate_equity_symbol(nt)
                 if not ok_sym:
@@ -757,7 +810,14 @@ def sync_stocks_from_table(_ts, prev, current, store_data):
                         "danger",
                         False,
                     )
-            db_manager.update_stock(rid, ticker=nt, shares=ns, cost_basis=ncb)
+            db_manager.update_stock(
+                rid,
+                ticker=nt,
+                shares=ns,
+                cost_basis=ncb,
+                brokerage=nb,
+                account=na,
+            )
             updated += 1
 
     if deleted_ids or inserted or updated:
@@ -788,7 +848,7 @@ def apply_filter_to_df(df, filter_state):
     return df
 
 
-@dash.callback(
+@dash_app.callback(
     Output("stocks-filter-state", "data"),
     Output("stocks-filter-ticker", "value", allow_duplicate=True),
     Output("stocks-filter-num-col", "value", allow_duplicate=True),
@@ -823,7 +883,7 @@ def apply_or_clear_filters(apply_n, clear_n, ticker_sub, num_col, num_op, num_va
     raise PreventUpdate
 
 
-@dash.callback(
+@dash_app.callback(
     Output("stocks-table", "active_cell"),
     Output("stocks-table", "selected_cells"),
     Output("stocks-table", "selected_rows"),
@@ -834,7 +894,7 @@ def clear_active_cell(n_clicks):
     return None, [], dash.no_update
 
 
-@dash.callback(
+@dash_app.callback(
     Output("stocks-table", "data", allow_duplicate=True),
     Input("stocks-store", "modified_timestamp"),
     Input("stocks-filter-state", "data"),
@@ -842,20 +902,26 @@ def clear_active_cell(n_clicks):
     prevent_initial_call="initial_duplicate",
 )
 def load_stocks_table(_ts, filter_state, _store_data):
+    from api import security_type as st
+
     df = db_manager.get_stocks()
     if df.empty:
         return []
+    df = st.filter_holdings_df_for_ui(df)
     df = apply_filter_to_df(df, filter_state)
     return df.to_dict("records")
 
 
-@dash.callback(
+@dash_app.callback(
     Output("stocks-summary-bar", "children"),
     Input("stocks-store", "modified_timestamp"),
     State("stocks-store", "data"),
 )
 def update_positions_summary(_ts, _store_data):
+    from api import security_type as st
+
     df = db_manager.get_stocks()
+    df = st.filter_holdings_df_for_ui(df)
     if df.empty:
         return html.Span(
             "No positions yet — use Add row to create one.",
@@ -883,7 +949,7 @@ def update_positions_summary(_ts, _store_data):
     )
 
 
-@dash.callback(
+@dash_app.callback(
     Output("stocks-store", "data", allow_duplicate=True),
     Output("manage-force-update-alert", "children"),
     Output("manage-force-update-alert", "is_open"),
@@ -937,7 +1003,7 @@ def manage_force_update_prices(n_clicks, current_counter):
         )
 
 
-@dash.callback(
+@dash_app.callback(
     Output("manage-force-update-alert", "is_open", allow_duplicate=True),
     Output("manage-force-update-timer", "disabled", allow_duplicate=True),
     Input("manage-force-update-timer", "n_intervals"),
@@ -950,7 +1016,7 @@ def manage_auto_hide_force_update_alert(_n_intervals, is_open):
     return False, True
 
 
-@dash.callback(
+@dash_app.callback(
     Output("plaid-holdings-table", "data"),
     Output("institution-filter", "options"),
     [
@@ -959,12 +1025,19 @@ def manage_auto_hide_force_update_alert(_n_intervals, is_open):
     ],
 )
 def load_plaid_holdings(ts, institution_value):
+    if db_manager.get_hide_plaid():
+        return [], [{"label": "All", "value": "All"}], "All"
     institutions = db_manager.get_institutions()
     options = [{"label": "All", "value": "All"}] + [
         {"label": name, "value": name} for name in institutions
     ]
     selected = None if institution_value in (None, "All") else institution_value
     df = db_manager.get_plaid_holdings(selected)
+    if df.empty:
+        return [], options
+    from api import security_type as st
+
+    df = st.filter_holdings_df_for_ui(df)
     if df.empty:
         return [], options
     totals = {

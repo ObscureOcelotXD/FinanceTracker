@@ -209,7 +209,8 @@ dash.register_page(
                     xs=12,
                     lg=10,
                     className="mx-auto",
-                )
+                ),
+                id="realized-manual-form-section",
             ),
             dbc.Row(
                 dbc.Col(
@@ -358,6 +359,7 @@ dash.register_page(
                                             ),
                                         ],
                                         justify="start",
+                                        id="realized-manual-delete-section",
                                     ),
                                     dbc.Alert(id="realized-edit-feedback", color="warning", is_open=False, className="mt-2"),
                                     dbc.Toast(
@@ -387,7 +389,25 @@ dash.register_page(
 )
 
 
-@dash.callback(
+dash_app = dash.get_app()
+
+
+@dash_app.callback(
+    Output("realized-manual-form-section", "style"),
+    Output("realized-manual-delete-section", "style"),
+    Output("realized-table", "editable"),
+    Output("realized-table", "row_selectable"),
+    Input("interval-component", "n_intervals"),
+    Input("realized-store", "data"),
+)
+def realized_sync_manual_entry_visibility(_n, _store):
+    if db_manager.get_hide_manual_entry():
+        hidden = {"display": "none"}
+        return hidden, hidden, False, False
+    return {}, {}, True, "single"
+
+
+@dash_app.callback(
     [
         Output("realized-form-output", "children"),
         Output("realized-form-output", "is_open"),
@@ -420,6 +440,8 @@ def add_realized_gain(
 ):
     if not n_clicks:
         raise PreventUpdate
+    if db_manager.get_hide_manual_entry():
+        return "Manual entry is disabled. Use Import CSV.", True, dash.no_update
     if not ticker or shares is None or proceeds is None or cost_basis is None:
         return "Enter ticker, shares, proceeds, and cost basis.", True, dash.no_update
     ticker = ticker.upper().strip()
@@ -449,7 +471,7 @@ def add_realized_gain(
         return f"Error: {e}", True, dash.no_update
 
 
-@dash.callback(
+@dash_app.callback(
     [
         Output("realized-store", "data", allow_duplicate=True),
         Output("realized-edit-feedback", "children", allow_duplicate=True),
@@ -466,6 +488,8 @@ def add_realized_gain(
 )
 def sync_realized_modify(data_ts, prev, current, store_data):
     if prev is None:
+        raise PreventUpdate
+    if db_manager.get_hide_manual_entry():
         raise PreventUpdate
     prev_rows = [r for r in prev if r.get("ticker") != "TOTAL" and r.get("id") is not None]
     curr_rows = [r for r in current if r.get("ticker") != "TOTAL" and r.get("id") is not None]
@@ -510,7 +534,7 @@ def sync_realized_modify(data_ts, prev, current, store_data):
     return (store_data or 0) + 1, "", False, True
 
 
-@dash.callback(
+@dash_app.callback(
     [
         Output("confirm-realized-delete", "displayed"),
         Output("confirm-realized-delete", "message"),
@@ -524,6 +548,8 @@ def sync_realized_modify(data_ts, prev, current, store_data):
 def confirm_realized_delete(n_clicks, selected_rows, current):
     if not n_clicks:
         raise PreventUpdate
+    if db_manager.get_hide_manual_entry():
+        return False, "", "Manual delete is disabled. Use Import CSV.", True
     if not selected_rows:
         return False, "", "Select a row to delete.", True
     row = current[selected_rows[0]]
@@ -533,7 +559,7 @@ def confirm_realized_delete(n_clicks, selected_rows, current):
     return True, msg, "", False
 
 
-@dash.callback(
+@dash_app.callback(
     [
         Output("realized-store", "data", allow_duplicate=True),
         Output("realized-edit-feedback", "children", allow_duplicate=True),
@@ -550,6 +576,8 @@ def confirm_realized_delete(n_clicks, selected_rows, current):
 def delete_realized_selected(submit_n_clicks, selected_rows, current, store_data):
     if not submit_n_clicks:
         raise PreventUpdate
+    if db_manager.get_hide_manual_entry():
+        return dash.no_update, "Manual delete is disabled. Use Import CSV.", True
     if not selected_rows:
         return dash.no_update, "Select a row to delete.", True
     row = current[selected_rows[0]]
@@ -560,7 +588,7 @@ def delete_realized_selected(submit_n_clicks, selected_rows, current, store_data
     return (store_data or 0) + 1, msg, True
 
 
-@dash.callback(
+@dash_app.callback(
     Output("realized-table", "active_cell"),
     Output("realized-table", "selected_cells"),
     Output("realized-table", "selected_rows"),
@@ -571,7 +599,7 @@ def clear_realized_active_cell(n_clicks):
     return None, [], dash.no_update
 
 
-@dash.callback(
+@dash_app.callback(
     Output("realized-table", "data", allow_duplicate=True),
     Output("realized-year-filter", "options"),
     Output("realized-year-filter", "value"),

@@ -1,0 +1,4 @@
+brokerage,account,ticker,shares,cost_basis
+Schwab,IRA,AAPL,250,42000
+Fidelity,Taxable,MSFT,100,35000
+Manual,Manage Stocks,VOO,40,18000
