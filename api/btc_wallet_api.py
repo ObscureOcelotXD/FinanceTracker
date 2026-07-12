@@ -14,8 +14,9 @@ btc_wallet_api = Blueprint("btc_wallet_api", __name__)
 
 CACHE = {"data": None, "ts": 0}
 
+
 class ElectrumClient:
-    def __init__(self, host, port, use_ssl, timeout=10):
+    def __init__(self, host, port, use_ssl, timeout=60):
         self._host = host
         self._port = port
         self._use_ssl = use_ssl
@@ -167,7 +168,9 @@ def wallet_summary():
     try:
         with ElectrumClient(host, port, use_ssl) as client:
             client.request("server.version", ["FinanceTracker", "1.4"])
-            used_addresses, used_scripthashes, scanned = _scan_addresses(client, xpub, gap_limit, address_type)
+            used_addresses, used_scripthashes, scanned = _scan_addresses(
+                client, xpub, gap_limit, address_type
+            )
             confirmed, unconfirmed = _sum_balances(client, used_scripthashes)
     except Exception as exc:
         return jsonify({"error": str(exc)})

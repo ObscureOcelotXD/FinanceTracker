@@ -18,7 +18,6 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
-import api.alpha_api as av
 from services import db_manager
 from api.quant_risk import compute_risk_summary
 
@@ -411,22 +410,11 @@ def create_flask_app():
             return jsonify({"status": "error"}), 500
         return jsonify({"status": "ok"}), 200
 
-    app.register_blueprint(av.alpha_api)
-
-    from api.finnhub_api import finnhub_api
-    app.register_blueprint(finnhub_api)
-
     from api.plaid_api import plaid_bp
     app.register_blueprint(plaid_bp)
 
-    from api.coingecko_api import coingecko_api
-    app.register_blueprint(coingecko_api)
-
     from api.umbrel_api import umbrel_api
     app.register_blueprint(umbrel_api)
-
-    # from api.nownodes_api import nownodes_api
-    # app.register_blueprint(nownodes_api)
 
     from api.umbrel_lightning_api import umbrel_lightning_api
     app.register_blueprint(umbrel_lightning_api)
@@ -442,9 +430,6 @@ def create_flask_app():
         @app.route("/btc/wallet_summary", methods=["GET"])
         def btc_wallet_summary_disabled():
             return jsonify({"enabled": False, "error": "BTC wallet not configured (bip_utils not installed)"})
-
-    # from api.binance_api import binance_api
-    # app.register_blueprint(binance_api)
 
     @app.route("/api/news_digest", methods=["GET"])
     def api_news_digest_get():

@@ -1,15 +1,14 @@
 {
-  "job_id": "f037479f-d9d3-4e9a-b364-3d3b7053d0ba",
+  "job_id": "513c8653-69de-4290-b47b-0ad846b716cd",
   "status": "done",
-  "message": "Backtest complete (sma) for CRWD, HON, MSFT, PLTR, RKLB.",
+  "message": "Backtest complete (sma) for AAPL, GOOG, PAVW, TSLA.",
   "error": null,
   "tickers": [
-    "CRWD",
-    "HON",
-    "MSFT",
-    "PLTR",
-    "RKLB"
+    "AAPL",
+    "GOOG",
+    "PAVW",
+    "TSLA"
   ],
-  "updated_at": "2026-04-08T00:03:30+00:00",
-  "finished_at": "2026-04-08T00:03:30+00:00"
+  "updated_at": "2026-07-12T04:45:43+00:00",
+  "finished_at": "2026-07-12T04:45:43+00:00"
 }

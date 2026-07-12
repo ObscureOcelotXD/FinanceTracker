@@ -50,7 +50,6 @@ if __name__ == '__main__':
 
         # Initialize Dash before the Flask server handles any requests.
         import dashApp as dashApp
-        import dash_callbacks
 
         # Update stock prices needs to run here so db has time to initialize.
         import api.finnhub_api as finnhub
