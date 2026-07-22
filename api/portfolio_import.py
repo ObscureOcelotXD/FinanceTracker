@@ -271,10 +271,12 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
         "institution": "brokerage",
         "account_name": "account",
         "account_type": "account",
+        "acct": "account",
         "opened": "open_date",
         "open": "open_date",
         "cost": "cost_basis",
         "basis": "cost_basis",
+        "costbasis": "cost_basis",
         "value": "market_value",
         "market_value": "market_value",
         "total_value": "market_value",
@@ -341,7 +343,36 @@ def _decode_upload(contents: str) -> bytes:
 
 
 def _read_csv_bytes(raw: bytes) -> pd.DataFrame:
-    df = pd.read_csv(io.BytesIO(raw), encoding="utf-8-sig")
+    text = None
+    for encoding in ("utf-8-sig", "utf-16", "utf-16-le", "latin-1"):
+        try:
+            candidate = raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        # Reject UTF-8 misreads of UTF-16 (lots of NULs).
+        if "\x00" in candidate and not encoding.startswith("utf-16"):
+            continue
+        text = candidate
+        break
+    if text is None:
+        text = raw.decode("utf-8", errors="replace")
+
+    lines = text.splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    text = "\n".join(lines)
+    if not text.strip():
+        return pd.DataFrame()
+
+    sep = ","
+    try:
+        sample = "\n".join(lines[:30])
+        sep = csv.Sniffer().sniff(sample, delimiters=",;\t").delimiter
+    except csv.Error:
+        if text.count(";") > text.count(","):
+            sep = ";"
+
+    df = pd.read_csv(io.StringIO(text), sep=sep)
     df = _coerce_broker_export_columns(df)
     first_col = str(df.columns[0]).strip().lower()
     brokerish = {
@@ -357,7 +388,7 @@ def _read_csv_bytes(raw: bytes) -> pd.DataFrame:
         "ibkr",
     }
     if first_col in brokerish or any(first_col.startswith(b) for b in brokerish):
-        raw_again = pd.read_csv(io.BytesIO(raw), header=None)
+        raw_again = pd.read_csv(io.StringIO(text), header=None, sep=sep)
         if raw_again.shape[1] >= 4:
             n = min(5, raw_again.shape[1])
             raw_again = raw_again.iloc[:, :n].copy()

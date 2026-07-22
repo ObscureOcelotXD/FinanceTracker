@@ -248,6 +248,31 @@ def test_admin_wipe_all_returns_ok(client, monkeypatch):
     assert captured["wipe_etf_sources"] is True
 
 
+def test_admin_backfill_prices_returns_ok(client, monkeypatch):
+    def _fake_backfill(lookback_days=None, force=False):
+        assert force is True
+        assert lookback_days == 30
+        return {
+            "upserted": 12,
+            "skipped": False,
+            "reason": None,
+            "lookback_days": 30,
+            "distinct_dates": 20,
+            "tickers": 3,
+        }
+
+    monkeypatch.setattr(
+        "api.finnhub_api.backfill_held_price_history",
+        _fake_backfill,
+    )
+    r = client.post("/admin/backfill_prices", json={"days": 30})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["status"] == "ok"
+    assert data["upserted"] == 12
+    assert data["tickers"] == 3
+
+
 def test_admin_wipe_all_keeps_etf_by_default(client, monkeypatch):
     import server
 

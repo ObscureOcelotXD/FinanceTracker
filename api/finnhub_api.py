@@ -18,6 +18,9 @@ from services.db_manager import (
     get_sector_map,
     get_sector_records,
     upsert_stock_sector,
+    get_stock_prices_df,
+    get_app_setting,
+    set_app_setting,
 )
 
 # Kept as a Blueprint name for historical imports; no HTTP routes remain.
@@ -219,6 +222,7 @@ def update_stock_prices(forceUpdate: bool = False):
     if last_run == today and not forceUpdate:
         if not missing:
             print("[Finnhub] Update already performed today. Skipping update.")
+            backfill_held_price_history()
             return
         # New holdings imported after today's run still need quotes.
         print(
@@ -228,6 +232,7 @@ def update_stock_prices(forceUpdate: bool = False):
 
     if not tickers:
         print("[Finnhub] No tickers to update.")
+        backfill_held_price_history()
         return
 
     # Fetch prices concurrently using Finnhub
@@ -242,3 +247,166 @@ def update_stock_prices(forceUpdate: bool = False):
         else:
             print(f"[Finnhub] Price for {ticker} not available.")
     set_last_update(today)
+    backfill_held_price_history()
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_truthy(name: str, default: bool = False) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "y", "on"}
+
+
+def _distinct_price_dates(lookback_days: int) -> int:
+    df = get_stock_prices_df()
+    if df is None or df.empty:
+        return 0
+    cutoff = (
+        datetime.date.today() - datetime.timedelta(days=max(lookback_days, 1))
+    ).isoformat()
+    dates = df["date"].astype(str).str[:10]
+    return int(dates[dates >= cutoff].nunique())
+
+
+def backfill_held_price_history(
+    lookback_days: int | None = None,
+    *,
+    force: bool = False,
+) -> dict:
+    """
+    Fill missing daily closes for held tickers so quant metrics have a series.
+
+    Uses Yahoo chart data (same source as SPY beta). Automatic runs happen at most
+    once per day unless coverage is still thin. Disable auto with
+    ``PRICE_HISTORY_BACKFILL=0``. Pass ``force=True`` (admin button) to run anytime.
+    """
+    lookback = (
+        lookback_days
+        if lookback_days is not None
+        else _env_int("PRICE_HISTORY_BACKFILL_DAYS", 60)
+    )
+    if lookback <= 0:
+        return {
+            "upserted": 0,
+            "skipped": True,
+            "reason": "lookback_days must be > 0",
+            "lookback_days": lookback,
+            "distinct_dates": 0,
+            "tickers": 0,
+        }
+
+    auto_enabled = _env_truthy("PRICE_HISTORY_BACKFILL", default=True)
+    if not force and not auto_enabled:
+        return {
+            "upserted": 0,
+            "skipped": True,
+            "reason": "PRICE_HISTORY_BACKFILL disabled",
+            "lookback_days": lookback,
+            "distinct_dates": _distinct_price_dates(lookback),
+            "tickers": 0,
+        }
+
+    min_dates = _env_int("PRICE_HISTORY_MIN_DATES", 15)
+    today = datetime.date.today().isoformat()
+    env_force = _env_truthy("PRICE_HISTORY_BACKFILL_FORCE", default=False)
+    force = bool(force or env_force)
+    last = (get_app_setting("last_price_history_backfill") or "").strip()
+    distinct = _distinct_price_dates(lookback)
+
+    if not force:
+        if distinct >= min_dates:
+            if last != today:
+                set_app_setting("last_price_history_backfill", today)
+            return {
+                "upserted": 0,
+                "skipped": True,
+                "reason": f"already have {distinct} distinct date(s) (≥{min_dates})",
+                "lookback_days": lookback,
+                "distinct_dates": distinct,
+                "tickers": 0,
+            }
+        if last == today:
+            return {
+                "upserted": 0,
+                "skipped": True,
+                "reason": "already ran today",
+                "lookback_days": lookback,
+                "distinct_dates": distinct,
+                "tickers": 0,
+            }
+
+    tickers = [str(t).upper().strip() for t in (get_all_tickers() or []) if str(t).strip()]
+    if not tickers:
+        set_app_setting("last_price_history_backfill", today)
+        return {
+            "upserted": 0,
+            "skipped": True,
+            "reason": "no held tickers",
+            "lookback_days": lookback,
+            "distinct_dates": distinct,
+            "tickers": 0,
+        }
+
+    from api.quant_risk import ensure_benchmark_history, fetch_yahoo_history
+
+    end = datetime.datetime.now(datetime.timezone.utc)
+    start = end - datetime.timedelta(days=lookback)
+    upserted = 0
+
+    try:
+        ensure_benchmark_history("SPY", start, end + datetime.timedelta(days=1))
+    except Exception as exc:
+        print(f"[Prices] SPY history backfill failed: {exc}")
+
+    print(
+        f"[Prices] Backfilling up to {lookback}d of daily closes for "
+        f"{len(tickers)} ticker(s) (have {distinct} distinct date(s), want ≥{min_dates}"
+        f"{', forced' if force else ''})…"
+    )
+    for ticker in tickers:
+        try:
+            candles, error = fetch_yahoo_history(ticker, start, end)
+            if error or not candles:
+                print(f"[Prices] No Yahoo history for {ticker}")
+                continue
+            for ts, close in candles:
+                if close is None:
+                    continue
+                try:
+                    px = float(close)
+                except (TypeError, ValueError):
+                    continue
+                if px <= 0:
+                    continue
+                date_str = datetime.datetime.fromtimestamp(
+                    ts, tz=datetime.timezone.utc
+                ).date().isoformat()
+                upsert_stock_price(ticker, date_str, px)
+                upserted += 1
+        except Exception as exc:
+            print(f"[Prices] History backfill failed for {ticker}: {exc}")
+
+    set_app_setting("last_price_history_backfill", today)
+    distinct_after = _distinct_price_dates(lookback)
+    if upserted:
+        print(f"[Prices] Backfilled {upserted} historical close row(s).")
+    else:
+        print("[Prices] History backfill finished with no new rows.")
+    return {
+        "upserted": upserted,
+        "skipped": False,
+        "reason": None,
+        "lookback_days": lookback,
+        "distinct_dates": distinct_after,
+        "tickers": len(tickers),
+    }

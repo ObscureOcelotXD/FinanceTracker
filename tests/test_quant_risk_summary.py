@@ -1,6 +1,7 @@
 import math
 import datetime as dt
 import os
+import sqlite3
 
 import pandas as pd
 import pytest
@@ -13,6 +14,17 @@ def _init_temp_db(tmp_path):
     db_manager.DATABASE = str(db_path)
     db_manager.init_db()
     return db_path
+
+
+def _backdate_open_lots(opened_at="2020-01-01T00:00:00+00:00"):
+    """Tests seed historical prices; open lots must start before those dates."""
+    conn = sqlite3.connect(db_manager.DATABASE)
+    conn.execute(
+        "UPDATE Stocks SET opened_at_utc = ? WHERE closed_at_utc IS NULL",
+        (opened_at,),
+    )
+    conn.commit()
+    conn.close()
 
 
 @pytest.fixture
@@ -51,6 +63,7 @@ def test_quant_risk_summary_empty(client):
 def test_quant_risk_summary_metrics(monkeypatch, client):
     db_manager.insert_stock("AAPL", 1, cost_basis=100.0)
     db_manager.insert_stock("MSFT", 1, cost_basis=100.0)
+    _backdate_open_lots()
 
     _seed_prices(
         "AAPL",
@@ -115,6 +128,7 @@ def _compute_diversification_ratio(price_rows, weights, dates):
 def test_quant_risk_summary_diversification_ratio(monkeypatch, client):
     db_manager.insert_stock("AAPL", 1, cost_basis=100.0)
     db_manager.insert_stock("MSFT", 1, cost_basis=100.0)
+    _backdate_open_lots()
 
     aapl_prices = [
         ("2026-01-01", 100.0),
@@ -166,6 +180,7 @@ def test_quant_risk_summary_diversification_ratio(monkeypatch, client):
 
 def test_quant_risk_summary_fresh_flags(monkeypatch, client):
     db_manager.insert_stock("AAPL", 1, cost_basis=100.0)
+    _backdate_open_lots()
     _seed_prices(
         "AAPL",
         [

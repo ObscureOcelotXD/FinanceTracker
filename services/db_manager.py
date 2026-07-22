@@ -315,11 +315,78 @@ def init_db():
                OR account IS NULL OR TRIM(account) = ''
             """
         )
-    # Unique per brokerage + account + ticker (CSV source of truth may split same ticker).
-    cur4.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_stocks_brokerage_account_ticker
+    # Older local experiments used (account_name, ticker). That blocks Umbrel pulls
+    # that insert the same ticker into multiple brokerage/account buckets while
+    # account_name stays at its default empty string.
+    cur4.execute("DROP INDEX IF EXISTS idx_stocks_account_ticker")
+    cur4.execute("DROP INDEX IF EXISTS idx_stocks_ticker")
+    if "account_name" in stock_columns:
+        # Prefer explicit account labels when present; then rely on brokerage/account.
+        cur4.execute(
+            """
+            UPDATE Stocks
+            SET account = TRIM(account_name)
+            WHERE (account IS NULL OR TRIM(account) = '' OR account = 'Manage Stocks')
+              AND TRIM(COALESCE(account_name, '')) != ''
+            """
+        )
+        cur4.execute(
+            """
+            UPDATE Stocks
+            SET brokerage = COALESCE(NULLIF(TRIM(brokerage), ''), 'Manual'),
+                account = COALESCE(NULLIF(TRIM(account), ''), 'Manage Stocks')
+            """
+        )
+    # Position lifecycle: continuous uploads keep one open row; a gap then return
+    # creates a new open row (closed rows retained for history).
+    cur4.execute("PRAGMA table_info(Stocks)")
+    stock_columns = [row[1] for row in cur4.fetchall()]
+    if "opened_at_utc" not in stock_columns:
+        cur4.execute("ALTER TABLE Stocks ADD COLUMN opened_at_utc TEXT")
+    if "closed_at_utc" not in stock_columns:
+        cur4.execute("ALTER TABLE Stocks ADD COLUMN closed_at_utc TEXT")
+    cur4.execute(
+        """
+        UPDATE Stocks
+        SET opened_at_utc = COALESCE(
+            NULLIF(TRIM(opened_at_utc), ''),
+            '1970-01-01T00:00:00+00:00'
+        )
+        WHERE opened_at_utc IS NULL OR TRIM(opened_at_utc) = ''
+        """
+    )
+    # Allow multiple historical lots for the same brokerage/account/ticker.
+    cur4.execute("DROP INDEX IF EXISTS idx_stocks_brokerage_account_ticker")
+    cur4.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_stocks_open_brokerage_account_ticker
         ON Stocks (brokerage, account, ticker)
-    """)
+        WHERE closed_at_utc IS NULL
+        """
+    )
+    cur4.execute(
+        """
+        CREATE TABLE IF NOT EXISTS position_share_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stock_id INTEGER NOT NULL,
+            snapshot_date TEXT NOT NULL,
+            shares REAL NOT NULL,
+            cost_basis REAL,
+            UNIQUE (stock_id, snapshot_date)
+        )
+        """
+    )
+    # Seed a snapshot for open lots that do not have one yet (migration / first run).
+    today = datetime.now(timezone.utc).date().isoformat()
+    cur4.execute(
+        """
+        INSERT OR IGNORE INTO position_share_snapshots (stock_id, snapshot_date, shares, cost_basis)
+        SELECT id, ?, shares, cost_basis
+        FROM Stocks
+        WHERE closed_at_utc IS NULL
+        """,
+        (today,),
+    )
 
     cur5 = con.cursor()
     cur5.execute("""
@@ -390,6 +457,14 @@ def init_db():
             tax_year INTEGER NOT NULL
         )
     """)
+    cur8.execute("PRAGMA table_info(realized_gains)")
+    rg_cols = {row[1] for row in cur8.fetchall()}
+    if "brokerage" not in rg_cols:
+        cur8.execute("ALTER TABLE realized_gains ADD COLUMN brokerage TEXT")
+    if "account" not in rg_cols:
+        cur8.execute("ALTER TABLE realized_gains ADD COLUMN account TEXT")
+    if "source" not in rg_cols:
+        cur8.execute("ALTER TABLE realized_gains ADD COLUMN source TEXT")
 
     cur9 = con.cursor()
     cur9.execute("""
@@ -1051,6 +1126,7 @@ def get_plaid_holdings(institution_name=None):
         params.append(institution_name)
     query = f"""
         SELECT
+            h.id AS holding_id,
             h.account_id,
             COALESCE(a.official_name, a.name) AS account_name,
             i.institution_name,
@@ -1085,6 +1161,68 @@ def get_plaid_holdings(institution_name=None):
     return df
 
 
+def get_manage_positions_df(*, include_plaid: Optional[bool] = None):
+    """
+    Combined open Manage Stocks rows + optional Plaid holdings for one UI table.
+
+    Row ``id`` values are ``m:<stock_id>`` (manual/Umbrel) or ``p:<holding_id>`` (Plaid).
+    When ``include_plaid`` is None, respects ``get_hide_plaid()`` (hidden by default).
+    """
+    if include_plaid is None:
+        include_plaid = not get_hide_plaid()
+
+    parts = []
+    cols = [
+        "id",
+        "brokerage",
+        "account",
+        "ticker",
+        "shares",
+        "cost_basis",
+        "latest_price",
+        "position_value",
+        "gain_loss",
+        "gain_loss_pct",
+        "source",
+        "is_manual",
+    ]
+
+    manual = get_stocks()
+    if not manual.empty:
+        m = manual.copy()
+        m["source"] = "Manual"
+        m["is_manual"] = True
+        m["id"] = m["id"].astype(int).map(lambda x: f"m:{x}")
+        for col in cols:
+            if col not in m.columns:
+                m[col] = None
+        parts.append(m[cols])
+
+    if include_plaid:
+        plaid = get_plaid_holdings()
+        if not plaid.empty:
+            p = plaid.copy()
+            p["brokerage"] = p["institution_name"].fillna("Plaid").astype(str)
+            p["account"] = p["account_name"].fillna("").astype(str).str.strip()
+            p["account"] = p["account"].replace("", "—")
+            p["source"] = "Plaid"
+            p["is_manual"] = False
+            p["id"] = p["holding_id"].astype(int).map(lambda x: f"p:{x}")
+            for col in cols:
+                if col not in p.columns:
+                    p[col] = None
+            parts.append(p[cols])
+
+    if not parts:
+        return pd.DataFrame(columns=cols)
+
+    out = pd.concat(parts, ignore_index=True, sort=False)
+    return out.sort_values(
+        by=["source", "brokerage", "account", "ticker"],
+        kind="mergesort",
+    ).reset_index(drop=True)
+
+
 def wipe_all_data(force: bool = False, wipe_etf_sources: bool = False):
     """
     Clear local portfolio / market / news data.
@@ -1112,6 +1250,7 @@ def wipe_all_data(force: bool = False, wipe_etf_sources: bool = False):
     cur.execute("DELETE FROM realized_gains")
     cur.execute("DELETE FROM accounts")
     cur.execute("DELETE FROM transactions")
+    _safe_delete("position_share_snapshots")
     _safe_delete("items")
     _safe_delete("plaid_holdings")
     _safe_delete("price_update_log")
@@ -1595,7 +1734,7 @@ def get_all_records_df():
 #region Stock Data
 def get_held_stock_tickers():
     """
-    Distinct tickers from the manual ``Stocks`` table (Manage Stocks), uppercase, sorted.
+    Distinct tickers from open ``Stocks`` rows (Manage Stocks), uppercase, sorted.
     Used for portfolio-aware matching (e.g. news digest) without a separate symbol file.
     """
     conn = get_connection()
@@ -1605,6 +1744,7 @@ def get_held_stock_tickers():
         SELECT DISTINCT UPPER(TRIM(ticker)) AS t
         FROM Stocks
         WHERE TRIM(COALESCE(ticker, '')) != ''
+          AND closed_at_utc IS NULL
         ORDER BY t
         """
     )
@@ -2112,6 +2252,7 @@ def get_stocks():
             s.ticker,
             s.shares,
             COALESCE(s.cost_basis, 0) AS cost_basis,
+            s.opened_at_utc,
             sp.closing_price AS latest_price,
             (s.shares * sp.closing_price) AS position_value,
             ((s.shares * sp.closing_price) - COALESCE(s.cost_basis, 0)) AS gain_loss,
@@ -2129,6 +2270,7 @@ def get_stocks():
         LEFT JOIN stock_prices sp
             ON sp.ticker = s.ticker
            AND sp.date = latest.max_date
+        WHERE s.closed_at_utc IS NULL
         ORDER BY brokerage, account, s.ticker
     """
     df = pd.read_sql_query(query, conn)
@@ -2187,6 +2329,7 @@ def get_duplicate_stocks_df():
             SUM(shares) AS total_shares,
             SUM(COALESCE(cost_basis, 0)) AS total_cost_basis
         FROM Stocks
+        WHERE closed_at_utc IS NULL
         GROUP BY ticker
         HAVING COUNT(*) > 1
     """
@@ -2215,6 +2358,7 @@ def get_value_stocks():
                 SUM(shares) AS total_shares,
                 SUM(COALESCE(cost_basis, 0)) AS total_cost_basis
             FROM Stocks
+            WHERE closed_at_utc IS NULL
             GROUP BY ticker
         ) s
         LEFT JOIN (
@@ -2248,33 +2392,126 @@ def get_stock_prices_df():
     return df
 
 
+def _position_open_on_date(opened_at, closed_at, price_date) -> bool:
+    """True when a position lot contributes to portfolio value on price_date."""
+    if pd.isna(price_date):
+        return False
+
+    def _as_naive_day(value):
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return None
+        ts = pd.Timestamp(value)
+        if ts.tzinfo is not None:
+            ts = ts.tz_convert("UTC").tz_localize(None)
+        return ts.normalize()
+
+    d = _as_naive_day(price_date)
+    if d is None:
+        return False
+    open_d = _as_naive_day(opened_at)
+    if open_d is None:
+        open_d = pd.Timestamp.min.normalize()
+    if d < open_d:
+        return False
+    close_d = _as_naive_day(closed_at)
+    if close_d is None:
+        return True
+    return d < close_d
+
+
 def get_portfolio_value_history():
-    conn = get_connection()
-    query = """
-        SELECT
-            sp.date,
-            sp.ticker,
-            sp.closing_price,
-            s.total_shares AS shares
-        FROM stock_prices sp
-        JOIN (
-            SELECT ticker, SUM(shares) AS total_shares
-            FROM Stocks
-            GROUP BY ticker
-        ) s
-            ON sp.ticker = s.ticker
     """
-    df = pd.read_sql_query(query, conn)
+    Portfolio value over time using share snapshots within each lot's open window.
+
+    Trim/add uploads write a new snapshot for that day so historical value uses
+    the share count that was actually held, not only the latest quantity.
+    """
+    conn = get_connection()
+    positions = pd.read_sql_query(
+        """
+        SELECT
+            id AS stock_id,
+            ticker,
+            shares AS current_shares,
+            opened_at_utc,
+            closed_at_utc
+        FROM Stocks
+        WHERE TRIM(COALESCE(ticker, '')) != ''
+        """,
+        conn,
+    )
+    snapshots = pd.read_sql_query(
+        """
+        SELECT stock_id, snapshot_date, shares
+        FROM position_share_snapshots
+        ORDER BY stock_id, snapshot_date
+        """,
+        conn,
+    )
+    prices = pd.read_sql_query(
+        "SELECT ticker, date, closing_price FROM stock_prices",
+        conn,
+    )
     conn.close()
-    if df.empty:
-        return df
-    df = df.copy()
-    df["date"] = pd.to_datetime(df["date"])
-    df["closing_price"] = pd.to_numeric(df["closing_price"], errors="coerce")
-    df["shares"] = pd.to_numeric(df["shares"], errors="coerce")
-    df["position_value"] = df["shares"] * df["closing_price"]
+    if positions.empty or prices.empty:
+        return pd.DataFrame(columns=["date", "portfolio_value"])
+
+    positions = positions.copy()
+    prices = prices.copy()
+    prices["date"] = pd.to_datetime(prices["date"], errors="coerce")
+    prices["closing_price"] = pd.to_numeric(prices["closing_price"], errors="coerce")
+    prices = prices.dropna(subset=["date", "closing_price"])
+    if snapshots is not None and not snapshots.empty:
+        snapshots = snapshots.copy()
+        snapshots["snapshot_date"] = pd.to_datetime(snapshots["snapshot_date"], errors="coerce")
+        snapshots["shares"] = pd.to_numeric(snapshots["shares"], errors="coerce").fillna(0.0)
+        snapshots = snapshots.dropna(subset=["snapshot_date"])
+    else:
+        snapshots = pd.DataFrame(columns=["stock_id", "snapshot_date", "shares"])
+
+    parts = []
+    for _, lot in positions.iterrows():
+        ticker = str(lot.get("ticker") or "").upper()
+        if not ticker:
+            continue
+        ticker_prices = prices[prices["ticker"].astype(str).str.upper() == ticker]
+        if ticker_prices.empty:
+            continue
+        mask = ticker_prices["date"].map(
+            lambda d: _position_open_on_date(
+                lot.get("opened_at_utc"), lot.get("closed_at_utc"), d
+            )
+        )
+        if not mask.any():
+            continue
+        chunk = ticker_prices.loc[mask, ["date", "closing_price"]].copy()
+        lot_snaps = snapshots[snapshots["stock_id"] == lot["stock_id"]].sort_values(
+            "snapshot_date"
+        )
+        if lot_snaps.empty:
+            chunk["shares"] = float(lot.get("current_shares") or 0)
+        else:
+            snap_dates = [
+                pd.Timestamp(d).normalize() for d in lot_snaps["snapshot_date"].tolist()
+            ]
+            snap_shares = lot_snaps["shares"].tolist()
+
+            def _shares_on(d):
+                idx = bisect.bisect_right(snap_dates, pd.Timestamp(d).normalize()) - 1
+                if idx < 0:
+                    return float(snap_shares[0])
+                return float(snap_shares[idx])
+
+            chunk["shares"] = chunk["date"].map(_shares_on)
+        chunk["position_value"] = chunk["closing_price"] * chunk["shares"]
+        parts.append(chunk[["date", "position_value"]])
+
+    if not parts:
+        return pd.DataFrame(columns=["date", "portfolio_value"])
+
+    combined = pd.concat(parts, ignore_index=True)
     portfolio = (
-        df.groupby("date", as_index=False)["position_value"]
+        combined.groupby("date", as_index=False)["position_value"]
         .sum()
         .rename(columns={"position_value": "portfolio_value"})
         .sort_values("date")
@@ -2444,36 +2681,51 @@ def upsert_etf_source(symbol, source_type, url=None, updated_at=None):
 
 def delete_orphan_stock_prices():
     """
-    Remove stock_prices rows for tickers that are no longer in Stocks.
+    Remove stock_prices rows for tickers that have never been held.
+
+    Closed position lots still retain their ticker in Stocks so market history
+    survives gaps; only tickers with no open or closed lots are pruned.
     """
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
         DELETE FROM stock_prices
-        WHERE ticker NOT IN (SELECT ticker FROM Stocks)
+        WHERE ticker NOT IN (SELECT DISTINCT ticker FROM Stocks)
     """)
     conn.commit()
     conn.close()
 
 def insert_stock(ticker, shares, cost_basis=None, brokerage=None, account=None):
     """
-    Insert a new stock record into the Stocks table.
+    Insert a new open stock record into the Stocks table.
     Returns the new stock's id.
     """
     brokerage_val = (brokerage or "Manual").strip() or "Manual"
     account_val = (account or "Manage Stocks").strip() or "Manage Stocks"
     ticker_val = str(ticker).upper().strip()
+    now = _utc_now_iso()
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO Stocks (ticker, shares, cost_basis, brokerage, account)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO Stocks (
+            ticker, shares, cost_basis, brokerage, account, opened_at_utc, closed_at_utc
+        )
+        VALUES (?, ?, ?, ?, ?, ?, NULL)
         """,
-        (ticker_val, shares, cost_basis, brokerage_val, account_val),
+        (ticker_val, shares, cost_basis, brokerage_val, account_val, now),
     )
     conn.commit()
     stock_id = cur.lastrowid
+    today = datetime.now(timezone.utc).date().isoformat()
+    cur.execute(
+        """
+        INSERT OR IGNORE INTO position_share_snapshots (stock_id, snapshot_date, shares, cost_basis)
+        VALUES (?, ?, ?, ?)
+        """,
+        (stock_id, today, shares, cost_basis),
+    )
+    conn.commit()
     conn.close()
     return stock_id
 
@@ -2519,12 +2771,14 @@ def upsert_stock_by_ticker(ticker, shares, cost_basis=None, brokerage=None, acco
     brokerage_val = (brokerage or "Manual").strip() or "Manual"
     account_val = (account or "Manage Stocks").strip() or "Manage Stocks"
     ticker_val = str(ticker).upper().strip()
+    now = _utc_now_iso()
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
         """
         SELECT id, cost_basis FROM Stocks
         WHERE ticker = ? AND brokerage = ? AND account = ?
+          AND closed_at_utc IS NULL
         """,
         (ticker_val, brokerage_val, account_val),
     )
@@ -2541,48 +2795,237 @@ def upsert_stock_by_ticker(ticker, shares, cost_basis=None, brokerage=None, acco
     else:
         cur.execute(
             """
-            INSERT INTO Stocks (ticker, shares, cost_basis, brokerage, account)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO Stocks (
+                ticker, shares, cost_basis, brokerage, account, opened_at_utc, closed_at_utc
+            )
+            VALUES (?, ?, ?, ?, ?, ?, NULL)
             """,
-            (ticker_val, shares, cost_basis, brokerage_val, account_val),
+            (ticker_val, shares, cost_basis, brokerage_val, account_val, now),
         )
     conn.commit()
     conn.close()
+
+
+def _normalize_upload_stock_row(row: dict) -> Optional[dict]:
+    ticker = str(row.get("ticker") or "").upper().strip()
+    if not ticker:
+        return None
+    shares = float(row.get("shares") or 0)
+    cost_basis = row.get("cost_basis")
+    if cost_basis is not None and cost_basis != "":
+        cost_basis = float(cost_basis)
+    else:
+        cost_basis = None
+    brokerage = (str(row.get("brokerage") or "Manual").strip() or "Manual")
+    account = (str(row.get("account") or "Manage Stocks").strip() or "Manage Stocks")
+    return {
+        "ticker": ticker,
+        "shares": shares,
+        "cost_basis": cost_basis,
+        "brokerage": brokerage,
+        "account": account,
+    }
+
+
+def sync_stocks_from_upload(rows):
+    """
+    Diff an upload against open positions for historical continuance.
+
+    - Same (brokerage, account, ticker) still present: update shares/cost_basis;
+      keep ``id`` and ``opened_at_utc`` (continuous lot). Write a share snapshot
+      so trim/add history is correct for quant charts.
+    - Share reduction or full close: auto-insert a realized-gains row (proceeds
+      estimated from latest stored price when available).
+    - Present in upload but no open lot: insert a new open lot (re-buy after a
+      gap, or brand-new holding).
+    - Open lot missing from upload: set ``closed_at_utc`` (sold / left account).
+
+    Returns the number of open positions after the sync.
+    """
+    upload_map: dict[tuple[str, str, str], dict] = {}
+    for raw in rows or []:
+        normalized = _normalize_upload_stock_row(raw)
+        if normalized is None:
+            continue
+        key = (
+            normalized["brokerage"],
+            normalized["account"],
+            normalized["ticker"],
+        )
+        upload_map[key] = normalized
+
+    now = _utc_now_iso()
+    today = datetime.now(timezone.utc).date().isoformat()
+    sell_date = today
+    try:
+        tax_year = int(today[:4])
+    except ValueError:
+        tax_year = datetime.now(timezone.utc).year
+
+    # Read open lots + prices before taking the write lock.
+    conn_ro = get_connection()
+    cur_ro = conn_ro.cursor()
+    cur_ro.execute(
+        """
+        SELECT id, brokerage, account, ticker, shares, cost_basis, opened_at_utc
+        FROM Stocks
+        WHERE closed_at_utc IS NULL
+        """
+    )
+    open_lots = {}
+    for row in cur_ro.fetchall():
+        if not row[3]:
+            continue
+        key = (
+            (row[1] or "Manual").strip() or "Manual",
+            (row[2] or "Manage Stocks").strip() or "Manage Stocks",
+            str(row[3] or "").upper().strip(),
+        )
+        open_lots[key] = {
+            "id": row[0],
+            "brokerage": key[0],
+            "account": key[1],
+            "ticker": key[2],
+            "shares": float(row[4] or 0),
+            "cost_basis": float(row[5] or 0) if row[5] is not None else 0.0,
+            "opened_at_utc": row[6],
+        }
+    conn_ro.close()
+
+    tickers_needed = {
+        lot["ticker"]
+        for key, lot in open_lots.items()
+        if key not in upload_map
+        or float(upload_map[key]["shares"]) < lot["shares"]
+    }
+    price_map = get_latest_stock_prices_map(sorted(tickers_needed)) if tickers_needed else {}
+
+    conn = get_connection()
+    cur = conn.cursor()
+    upload_keys = set(upload_map)
+    open_keys = set(open_lots)
+
+    def _upsert_snapshot(stock_id, shares, cost_basis):
+        cur.execute(
+            """
+            INSERT INTO position_share_snapshots (stock_id, snapshot_date, shares, cost_basis)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(stock_id, snapshot_date) DO UPDATE SET
+                shares = excluded.shares,
+                cost_basis = excluded.cost_basis
+            """,
+            (stock_id, today, shares, cost_basis),
+        )
+
+    def _record_disposition(lot, sold_shares, sold_basis):
+        if sold_shares <= 0:
+            return
+        px = price_map.get(lot["ticker"])
+        proceeds = float(px) * sold_shares if px is not None else 0.0
+        buy_date = None
+        if lot.get("opened_at_utc"):
+            buy_date = str(lot["opened_at_utc"])[:10]
+        gain, gain_pct = _compute_realized_gain(proceeds, sold_basis, 0.0)
+        cur.execute(
+            """
+            INSERT INTO realized_gains (
+                ticker, shares, buy_date, sell_date, proceeds, cost_basis, fees,
+                realized_gain, realized_gain_pct, tax_year, brokerage, account, source
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                lot["ticker"],
+                sold_shares,
+                buy_date,
+                sell_date,
+                proceeds,
+                sold_basis,
+                0.0,
+                gain,
+                gain_pct,
+                tax_year,
+                lot["brokerage"],
+                lot["account"],
+                "upload_sync",
+            ),
+        )
+
+    for key in open_keys & upload_keys:
+        row = upload_map[key]
+        lot = open_lots[key]
+        new_shares = float(row["shares"])
+        old_shares = float(lot["shares"])
+        old_basis = float(lot["cost_basis"] or 0)
+        new_basis = row["cost_basis"]
+        if new_shares < old_shares and old_shares > 0:
+            sold_shares = old_shares - new_shares
+            sold_basis = old_basis * (sold_shares / old_shares)
+            _record_disposition(lot, sold_shares, sold_basis)
+            # Prefer remaining basis from upload when present; else prorate.
+            if new_basis is None:
+                new_basis = old_basis - sold_basis
+        cur.execute(
+            """
+            UPDATE Stocks
+            SET shares = ?, cost_basis = ?
+            WHERE id = ? AND closed_at_utc IS NULL
+            """,
+            (new_shares, new_basis, lot["id"]),
+        )
+        _upsert_snapshot(lot["id"], new_shares, new_basis)
+
+    for key in upload_keys - open_keys:
+        row = upload_map[key]
+        cur.execute(
+            """
+            INSERT INTO Stocks (
+                ticker, shares, cost_basis, brokerage, account, opened_at_utc, closed_at_utc
+            )
+            VALUES (?, ?, ?, ?, ?, ?, NULL)
+            """,
+            (
+                row["ticker"],
+                row["shares"],
+                row["cost_basis"],
+                row["brokerage"],
+                row["account"],
+                now,
+            ),
+        )
+        new_id = cur.lastrowid
+        _upsert_snapshot(new_id, row["shares"], row["cost_basis"])
+
+    for key in open_keys - upload_keys:
+        lot = open_lots[key]
+        if lot["shares"] > 0:
+            _record_disposition(lot, lot["shares"], lot["cost_basis"])
+        cur.execute(
+            """
+            UPDATE Stocks
+            SET closed_at_utc = ?
+            WHERE id = ? AND closed_at_utc IS NULL
+            """,
+            (now, lot["id"]),
+        )
+        _upsert_snapshot(lot["id"], 0.0, 0.0)
+
+    cur.execute("SELECT COUNT(*) FROM Stocks WHERE closed_at_utc IS NULL")
+    open_count = int(cur.fetchone()[0] or 0)
+    conn.commit()
+    conn.close()
+    return open_count
 
 
 def replace_all_stocks(rows):
     """
-    Wipe Stocks and insert rows. Each row: ticker, shares, optional cost_basis/brokerage/account.
-    Returns count inserted.
-    """
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM Stocks")
-    inserted = 0
-    for row in rows:
-        ticker = str(row.get("ticker") or "").upper().strip()
-        if not ticker:
-            continue
-        shares = float(row.get("shares") or 0)
-        cost_basis = row.get("cost_basis")
-        if cost_basis is not None and cost_basis != "":
-            cost_basis = float(cost_basis)
-        else:
-            cost_basis = None
-        brokerage = (str(row.get("brokerage") or "Manual").strip() or "Manual")
-        account = (str(row.get("account") or "Manage Stocks").strip() or "Manage Stocks")
-        cur.execute(
-            """
-            INSERT INTO Stocks (ticker, shares, cost_basis, brokerage, account)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (ticker, shares, cost_basis, brokerage, account),
-        )
-        inserted += 1
-    conn.commit()
-    conn.close()
-    return inserted
+    Apply an uploaded holdings snapshot with position continuity.
 
+    Historically this wiped and re-inserted every row. It now delegates to
+    ``sync_stocks_from_upload`` so identical (brokerage, account, ticker) lots
+    keep their open history across Umbrel/CSV uploads.
+    """
+    return sync_stocks_from_upload(rows)
 
 def replace_all_covered_calls(rows):
     """
@@ -2640,11 +3083,19 @@ def replace_all_covered_calls(rows):
 
 def delete_stock(stock_id):
     """
-    Delete the stock record with the given id from the Stocks table.
+    Close (soft-delete) the stock record with the given id.
+    Keeps the lot for history so a later re-buy is a new position.
     """
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("DELETE FROM Stocks WHERE id = ?", (stock_id,))
+    cur.execute(
+        """
+        UPDATE Stocks
+        SET closed_at_utc = ?
+        WHERE id = ? AND closed_at_utc IS NULL
+        """,
+        (_utc_now_iso(), stock_id),
+    )
     conn.commit()
     conn.close()
 
@@ -2667,6 +3118,9 @@ def insert_realized_gain(
     buy_date=None,
     sell_date=None,
     tax_year=None,
+    brokerage=None,
+    account=None,
+    source=None,
 ):
     gain, gain_pct = _compute_realized_gain(proceeds, cost_basis, fees)
     conn = get_connection()
@@ -2674,8 +3128,9 @@ def insert_realized_gain(
     cur.execute(
         """
         INSERT INTO realized_gains
-            (ticker, shares, buy_date, sell_date, proceeds, cost_basis, fees, realized_gain, realized_gain_pct, tax_year)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (ticker, shares, buy_date, sell_date, proceeds, cost_basis, fees,
+             realized_gain, realized_gain_pct, tax_year, brokerage, account, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             ticker,
@@ -2688,6 +3143,9 @@ def insert_realized_gain(
             gain,
             gain_pct,
             tax_year,
+            (str(brokerage).strip() if brokerage else None) or None,
+            (str(account).strip() if account else None) or None,
+            (str(source).strip() if source else None) or "manual",
         ),
     )
     conn.commit()
@@ -2706,12 +3164,20 @@ def update_realized_gain(
     buy_date=None,
     sell_date=None,
     tax_year=None,
+    brokerage=None,
+    account=None,
 ):
     fields = []
     params = []
     if ticker is not None:
         fields.append("ticker = ?")
         params.append(ticker)
+    if brokerage is not None:
+        fields.append("brokerage = ?")
+        params.append(brokerage)
+    if account is not None:
+        fields.append("account = ?")
+        params.append(account)
     if shares is not None:
         fields.append("shares = ?")
         params.append(shares)
@@ -2995,9 +3461,16 @@ def get_covered_calls(status=None):
 
 
 def get_all_tickers():
+    """Distinct tickers from currently open Stocks positions."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT ticker FROM Stocks ORDER BY ticker")
+    cursor.execute(
+        """
+        SELECT DISTINCT ticker FROM Stocks
+        WHERE closed_at_utc IS NULL
+        ORDER BY ticker
+        """
+    )
     rows = cursor.fetchall()
     conn.close()
     return [row[0] for row in rows if row[0]]

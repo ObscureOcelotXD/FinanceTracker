@@ -25,7 +25,7 @@ venv\Scripts\python.exe -m pip install -q -r requirements.txt
 
 echo.
 echo Starting FinanceTracker...
-echo   Flask + Dash: http://127.0.0.1:5000
+echo   Flask + Dash: home URL is printed when a free port is chosen
 echo   Streamlit backtest: http://127.0.0.1:8501
 echo   Streamlit filings: http://127.0.0.1:8502
 echo.

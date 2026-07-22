@@ -10,9 +10,9 @@ from dashPages.stocks_manage import apply_filter_to_df
 def _sample_df():
     return pd.DataFrame(
         [
-            {"id": 1, "ticker": "NVDA", "shares": 10, "cost_basis": 1000, "position_value": 1500, "gain_loss": 500, "gain_loss_pct": 0.50},
-            {"id": 2, "ticker": "MSFT", "shares": 5, "cost_basis": 2000, "position_value": 2200, "gain_loss": 200, "gain_loss_pct": 0.10},
-            {"id": 3, "ticker": "AAPL", "shares": 20, "cost_basis": 3000, "position_value": 2800, "gain_loss": -200, "gain_loss_pct": -0.067},
+            {"id": "m:1", "ticker": "NVDA", "shares": 10, "cost_basis": 1000, "position_value": 1500, "gain_loss": 500, "gain_loss_pct": 0.50, "source": "Manual"},
+            {"id": "m:2", "ticker": "MSFT", "shares": 5, "cost_basis": 2000, "position_value": 2200, "gain_loss": 200, "gain_loss_pct": 0.10, "source": "Manual"},
+            {"id": "p:3", "ticker": "AAPL", "shares": 20, "cost_basis": 3000, "position_value": 2800, "gain_loss": -200, "gain_loss_pct": -0.067, "source": "Plaid"},
         ]
     )
 
@@ -68,3 +68,17 @@ def test_empty_df_returns_empty():
     df = pd.DataFrame()
     result = apply_filter_to_df(df, {"ticker": "NV"})
     assert result.empty
+
+
+def test_source_filter_manual_only():
+    df = _sample_df()
+    result = apply_filter_to_df(df, {"source": "Manual"})
+    assert len(result) == 2
+    assert set(result["ticker"]) == {"NVDA", "MSFT"}
+
+
+def test_source_filter_plaid_only():
+    df = _sample_df()
+    result = apply_filter_to_df(df, {"source": "Plaid"})
+    assert len(result) == 1
+    assert result.iloc[0]["ticker"] == "AAPL"

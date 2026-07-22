@@ -11,10 +11,12 @@ Personal stocks-focused finance tracker with Dash dashboards, Plaid linking, Umb
 
 From the project root, the script creates a `venv` if needed, installs `requirements.txt`, then starts:
 
-- **Flask + Dash** at http://127.0.0.1:5000
+- **Flask + Dash** at a free local port (tries **5000**, then 5050/8000/…); startup prints the home URL and opens it in your browser
 - **Streamlit** on 8501 (quant backtest) and 8502 (SEC filings), if `STREAMLIT_AUTO_START` is enabled
 
 **Mac/Linux:** first time run `chmod +x start.sh`. Copy `.env.example` → `.env` and add API keys (or use Infisical).
+
+> **macOS note:** Port 5000 is often taken by AirPlay Receiver (`AirTunes`), which responds with HTTP 403. Startup skips busy/AirTunes ports automatically; override preferred port with `FLASK_PORT`.
 
 ### Secrets: Infisical or `.env`
 
@@ -35,7 +37,7 @@ Secrets come from the **environment** only (`os.getenv`).
 
 ## Project layout
 
-- **`main.py`** – Entry: DB init, Streamlit, Dash, Finnhub price refresh, Flask on 5000
+- **`main.py`** – Entry: DB init, Streamlit, Dash, Finnhub price refresh, Flask on first free port
 - **`server.py`** / **`runServer.py`** – Flask app factory and gunicorn entry
 - **`dashApp.py`** + **`dashPages/`** – Dash UI (stocks, manage, covered calls, import, realized)
 - **`api/`** – Plaid, Finnhub, Polygon, Umbrel, BTC wallet, portfolio import/sync, quant risk, news
@@ -87,7 +89,7 @@ Configure `PLAID_*` in `.env`, add redirect URI `…/oauth/callback` in the Plai
 
 ## Portfolio sync (Umbrel Files)
 
-Push/Pull from **Import CSV** writes `Home → Documents → Portfolio → portfolio.csv`. Needs `UMBREL_TAILSCALE_IP` + `UMBREL_PASSWORD`. Details: [docs/PORTFOLIO_SYNC.md](docs/PORTFOLIO_SYNC.md).
+Need `UMBREL_TAILSCALE_IP` + `UMBREL_PASSWORD`. Flow: upload CSV into the app, then **Push to Umbrel** (Push exports the app DB — it does not upload your Numbers file directly). Details: [docs/PORTFOLIO_SYNC.md](docs/PORTFOLIO_SYNC.md).
 
 ## SEC filings (Groq)
 

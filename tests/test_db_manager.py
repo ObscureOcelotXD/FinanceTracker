@@ -2,6 +2,8 @@ import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
 
+import pandas as pd
+
 from services import db_manager
 
 
@@ -137,6 +139,54 @@ def test_plaid_holdings_upsert_and_query(tmp_path):
     assert row["shares"] == 2.0
     assert row["cost_basis"] == 300.0
     assert row["position_value"] == 400.0
+    assert "holding_id" in row.index
+    assert int(row["holding_id"]) > 0
+
+
+def test_get_manage_positions_df_respects_hide_plaid(tmp_path):
+    _init_temp_db(tmp_path)
+    db_manager.insert_stock("MSFT", 1.0, cost_basis=100.0, brokerage="Umbrel", account="IRA")
+    conn = sqlite3.connect(db_manager.DATABASE)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO items (item_id, access_token, institution_name) VALUES (?, ?, ?)",
+        ("item-1", "token", "Test Bank"),
+    )
+    cur.execute(
+        """
+        INSERT INTO accounts (account_id, name, official_name, type, subtype, current_balance, item_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("acct-1", "Brokerage", "Brokerage", "investment", "brokerage", 0.0, "item-1"),
+    )
+    cur.execute(
+        "INSERT INTO stock_prices (ticker, date, closing_price) VALUES (?, ?, ?)",
+        ("AAPL", "2026-01-24", 200.0),
+    )
+    conn.commit()
+    conn.close()
+    db_manager.upsert_plaid_holding("acct-1", "AAPL", 2.0, 300.0)
+
+    db_manager.set_hide_plaid(True)
+    hidden = db_manager.get_manage_positions_df()
+    assert len(hidden) == 1
+    assert hidden.iloc[0]["source"] == "Manual"
+    assert str(hidden.iloc[0]["id"]).startswith("m:")
+
+    db_manager.set_hide_plaid(False)
+    shown = db_manager.get_manage_positions_df()
+    assert len(shown) == 2
+    sources = set(shown["source"])
+    assert sources == {"Manual", "Plaid"}
+    plaid_row = shown[shown["source"] == "Plaid"].iloc[0]
+    assert str(plaid_row["id"]).startswith("p:")
+    assert plaid_row["brokerage"] == "Test Bank"
+    assert plaid_row["ticker"] == "AAPL"
+
+    forced = db_manager.get_manage_positions_df(include_plaid=True)
+    assert len(forced) == 2
+    skipped = db_manager.get_manage_positions_df(include_plaid=False)
+    assert len(skipped) == 1
 
 
 def test_client_error_log_insert(tmp_path):
@@ -255,6 +305,273 @@ def test_plaid_helpers_use_configured_database_path(tmp_path, monkeypatch):
     conn.close()
 
     assert not (tmp_path / "finance_data.db").exists()
+
+
+def test_init_db_drops_legacy_account_name_unique_index(tmp_path):
+    """Umbrel pulls insert the same ticker under different brokerage/account rows.
+
+    Older local experiments left ``idx_stocks_account_ticker`` on
+    ``(account_name, ticker)`` with ``account_name`` defaulting to ''. That
+    blocked multi-account imports even after brokerage/account columns existed.
+    """
+    db_path = tmp_path / "legacy_account_name.db"
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE Stocks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT NOT NULL,
+            shares REAL NOT NULL,
+            cost_basis REAL,
+            account_name TEXT NOT NULL DEFAULT '',
+            brokerage TEXT,
+            account TEXT
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE UNIQUE INDEX idx_stocks_account_ticker
+        ON Stocks (account_name, ticker)
+        """
+    )
+    cur.execute(
+        """
+        INSERT INTO Stocks (ticker, shares, cost_basis, account_name, brokerage, account)
+        VALUES ('AAPL', 1, 100, '', 'Manual', 'Manage Stocks')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    db_manager.DATABASE = str(db_path)
+    db_manager.init_db()
+
+    conn = sqlite3.connect(db_path)
+    names = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='Stocks'"
+        )
+    }
+    conn.close()
+    assert "idx_stocks_account_ticker" not in names
+    assert "idx_stocks_open_brokerage_account_ticker" in names
+
+    inserted = db_manager.replace_all_stocks(
+        [
+            {"ticker": "AAPL", "shares": 10, "brokerage": "Fidelity", "account": "IRA"},
+            {"ticker": "AAPL", "shares": 5, "brokerage": "Schwab", "account": "Brokerage"},
+        ]
+    )
+    assert inserted == 2
+    df = db_manager.get_stocks()
+    assert len(df) == 2
+    assert sorted(df["ticker"].tolist()) == ["AAPL", "AAPL"]
+
+
+def test_sync_stocks_keeps_continuous_lot_and_treats_gap_as_new(tmp_path):
+    _init_temp_db(tmp_path)
+    first = {
+        "ticker": "NVDA",
+        "shares": 10,
+        "cost_basis": 1000,
+        "brokerage": "Fidelity",
+        "account": "Brokerage",
+    }
+    db_manager.replace_all_stocks([first])
+    open_df = db_manager.get_stocks()
+    assert len(open_df) == 1
+    lot_id = int(open_df.iloc[0]["id"])
+    opened_at = open_df.iloc[0]["opened_at_utc"]
+
+    # Same key on next upload: continuous lot (same id / opened_at), updated shares.
+    db_manager.replace_all_stocks([{**first, "shares": 12, "cost_basis": 1200}])
+    open_df = db_manager.get_stocks()
+    assert len(open_df) == 1
+    assert int(open_df.iloc[0]["id"]) == lot_id
+    assert open_df.iloc[0]["opened_at_utc"] == opened_at
+    assert float(open_df.iloc[0]["shares"]) == 12.0
+
+    # Missing from upload: close the lot.
+    db_manager.replace_all_stocks([])
+    assert db_manager.get_stocks().empty
+    conn = sqlite3.connect(db_manager.DATABASE)
+    closed = conn.execute(
+        "SELECT id, closed_at_utc FROM Stocks WHERE id = ?", (lot_id,)
+    ).fetchone()
+    conn.close()
+    assert closed is not None
+    assert closed[1] is not None
+
+    # Same key returns later: brand-new open lot (new id).
+    db_manager.replace_all_stocks([first])
+    open_df = db_manager.get_stocks()
+    assert len(open_df) == 1
+    assert int(open_df.iloc[0]["id"]) != lot_id
+
+
+def test_portfolio_value_history_skips_gap_between_lots(tmp_path):
+    _init_temp_db(tmp_path)
+    row = {
+        "ticker": "NVDA",
+        "shares": 2,
+        "cost_basis": 200,
+        "brokerage": "Schwab",
+        "account": "IRA",
+    }
+    db_manager.replace_all_stocks([row])
+    open_id = int(db_manager.get_stocks().iloc[0]["id"])
+    conn = sqlite3.connect(db_manager.DATABASE)
+    conn.execute(
+        "UPDATE Stocks SET opened_at_utc = ? WHERE id = ?",
+        ("2026-01-01T00:00:00+00:00", open_id),
+    )
+    conn.execute("DELETE FROM position_share_snapshots WHERE stock_id = ?", (open_id,))
+    conn.execute(
+        """
+        INSERT INTO position_share_snapshots (stock_id, snapshot_date, shares, cost_basis)
+        VALUES (?, '2026-01-01', 2, 200)
+        """,
+        (open_id,),
+    )
+    conn.commit()
+    conn.close()
+    for day, price in [
+        ("2026-01-01", 100.0),
+        ("2026-01-02", 110.0),
+        ("2026-01-03", 120.0),
+        ("2026-01-04", 130.0),
+    ]:
+        db_manager.upsert_stock_price("NVDA", day, price)
+
+    # Close after Jan 2, reopen on Jan 4.
+    db_manager.replace_all_stocks([])
+    conn = sqlite3.connect(db_manager.DATABASE)
+    conn.execute(
+        "UPDATE Stocks SET closed_at_utc = ? WHERE id = ?",
+        ("2026-01-03T00:00:00+00:00", open_id),
+    )
+    conn.commit()
+    conn.close()
+    db_manager.replace_all_stocks([row])
+    new_id = int(db_manager.get_stocks().iloc[0]["id"])
+    conn = sqlite3.connect(db_manager.DATABASE)
+    conn.execute(
+        "UPDATE Stocks SET opened_at_utc = ? WHERE id = ?",
+        ("2026-01-04T00:00:00+00:00", new_id),
+    )
+    conn.execute("DELETE FROM position_share_snapshots WHERE stock_id = ?", (new_id,))
+    conn.execute(
+        """
+        INSERT INTO position_share_snapshots (stock_id, snapshot_date, shares, cost_basis)
+        VALUES (?, '2026-01-04', 2, 200)
+        """,
+        (new_id,),
+    )
+    conn.commit()
+    conn.close()
+
+    hist = db_manager.get_portfolio_value_history()
+    by_date = {
+        pd.Timestamp(r["date"]).strftime("%Y-%m-%d"): float(r["portfolio_value"])
+        for _, r in hist.iterrows()
+    }
+    assert by_date["2026-01-01"] == 200.0
+    assert by_date["2026-01-02"] == 220.0
+    assert "2026-01-03" not in by_date  # gap day
+    assert by_date["2026-01-04"] == 260.0
+
+
+def test_sync_trim_and_close_create_realized_gains(tmp_path):
+    _init_temp_db(tmp_path)
+    row = {
+        "ticker": "NVDA",
+        "shares": 10,
+        "cost_basis": 1000.0,
+        "brokerage": "Fidelity",
+        "account": "Brokerage",
+    }
+    db_manager.replace_all_stocks([row])
+    db_manager.upsert_stock_price("NVDA", "2026-07-12", 150.0)
+
+    # Trim 4 shares → realized on 4 @ $150, basis $400.
+    db_manager.replace_all_stocks([{**row, "shares": 6, "cost_basis": 600.0}])
+    gains = db_manager.get_realized_gains()
+    assert len(gains) == 1
+    g = gains.iloc[0]
+    assert float(g["shares"]) == 4.0
+    assert float(g["cost_basis"]) == 400.0
+    assert float(g["proceeds"]) == 600.0
+    assert g["source"] == "upload_sync"
+    assert g["brokerage"] == "Fidelity"
+    assert float(db_manager.get_stocks().iloc[0]["shares"]) == 6.0
+
+    # Full close remaining 6.
+    db_manager.replace_all_stocks([])
+    gains = db_manager.get_realized_gains()
+    assert len(gains) == 2
+    closed = gains[gains["shares"] == 6].iloc[0]
+    assert float(closed["cost_basis"]) == 600.0
+    assert float(closed["proceeds"]) == 900.0
+    assert db_manager.get_stocks().empty
+
+
+def test_sync_add_shares_no_realized_and_snapshots_history(tmp_path):
+    _init_temp_db(tmp_path)
+    row = {
+        "ticker": "AAPL",
+        "shares": 2,
+        "cost_basis": 200.0,
+        "brokerage": "Schwab",
+        "account": "IRA",
+    }
+    db_manager.replace_all_stocks([row])
+    stock_id = int(db_manager.get_stocks().iloc[0]["id"])
+    conn = sqlite3.connect(db_manager.DATABASE)
+    conn.execute(
+        "UPDATE Stocks SET opened_at_utc = ? WHERE id = ?",
+        ("2026-01-01T00:00:00+00:00", stock_id),
+    )
+    conn.execute(
+        "UPDATE position_share_snapshots SET snapshot_date = ? WHERE stock_id = ?",
+        ("2026-01-01", stock_id),
+    )
+    conn.commit()
+    conn.close()
+    for day, price in [("2026-01-01", 100.0), ("2026-01-02", 110.0), ("2026-01-03", 120.0)]:
+        db_manager.upsert_stock_price("AAPL", day, price)
+
+    # Add shares on Jan 3 (no realized gain).
+    db_manager.replace_all_stocks([{**row, "shares": 5, "cost_basis": 500.0}])
+    assert db_manager.get_realized_gains().empty
+
+    # Force snapshot date for the add to Jan 3 for history math.
+    conn = sqlite3.connect(db_manager.DATABASE)
+    conn.execute(
+        "UPDATE position_share_snapshots SET snapshot_date = ? WHERE stock_id = ? AND shares = 5",
+        ("2026-01-03", stock_id),
+    )
+    # Keep the original 2-share snapshot on Jan 1.
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO position_share_snapshots (stock_id, snapshot_date, shares, cost_basis)
+        VALUES (?, '2026-01-01', 2, 200)
+        """,
+        (stock_id,),
+    )
+    conn.commit()
+    conn.close()
+
+    hist = db_manager.get_portfolio_value_history()
+    by_date = {
+        pd.Timestamp(r["date"]).strftime("%Y-%m-%d"): float(r["portfolio_value"])
+        for _, r in hist.iterrows()
+    }
+    assert by_date["2026-01-01"] == 200.0  # 2 * 100
+    assert by_date["2026-01-02"] == 220.0  # 2 * 110 (still pre-add)
+    assert by_date["2026-01-03"] == 600.0  # 5 * 120
 
 
 def test_get_held_stock_tickers_distinct_upper(tmp_path):

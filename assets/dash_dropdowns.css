@@ -1,14 +1,37 @@
 .chart-dropdown .Select-control {
-  background-color: #111827;
-  color: #e5e7eb;
-  border-color: rgba(16, 185, 129, 0.35);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.12);
+  background-color: #111827 !important;
+  color: #e5e7eb !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.12) !important;
 }
 
 .chart-dropdown .Select-value-label,
 .chart-dropdown .Select-input input,
 .chart-dropdown .Select-placeholder {
   color: #e5e7eb !important;
+}
+
+/* Ensure selected values remain visible in both single and multi modes */
+.chart-dropdown .Select--single > .Select-control .Select-value,
+.chart-dropdown .Select--single > .Select-control .Select-value .Select-value-label,
+.chart-dropdown .Select--multi .Select-value,
+.chart-dropdown .Select--multi .Select-value .Select-value-label,
+.chart-dropdown .Select-value-label {
+  color: #e5e7eb !important;
+  opacity: 1 !important;
+}
+
+.chart-dropdown .has-value.Select--single > .Select-control .Select-value,
+.chart-dropdown .has-value.Select--single > .Select-control .Select-value .Select-value-label,
+.chart-dropdown .Select-placeholder,
+.chart-dropdown .Select-input > input {
+  color: #e5e7eb !important;
+  opacity: 1 !important;
+}
+
+.chart-dropdown .Select--multi .Select-value {
+  background-color: rgba(16, 185, 129, 0.2) !important;
+  border: 1px solid rgba(16, 185, 129, 0.45) !important;
 }
 
 .chart-dropdown .Select-menu-outer,

@@ -1,0 +1,6 @@
+"type","brokerage","account","ticker","shares","cost_basis/premium","strike","expiration_date","contracts","open_date","status","notes"
+"stock","Schwab","Individual","AAPL",6,600,"","","","","",""
+"stock","Schwab","Individual","MSFT",8,800,"","","","","",""
+"stock","Fidelity","Taxable","AAPL",3,450,"","","","","",""
+"call","Schwab","Individual","MSFT","",410.55,450.0,"2026-09-18",2,"2026-07-10","open","rolled MSFT cover"
+"call","Fidelity","Taxable","AAPL","",88.00,175.0,"07/17/2026",1,"","open","new taxable cover"

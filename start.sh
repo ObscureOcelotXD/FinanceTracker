@@ -25,7 +25,7 @@ echo "Installing/updating dependencies..."
 
 echo ""
 echo "Starting FinanceTracker..."
-echo "  Flask + Dash (main app): http://127.0.0.1:5000"
+echo "  Flask + Dash will print the home-page URL once a free port is chosen"
 echo "  Streamlit backtest:      http://127.0.0.1:8501 (if enabled)"
 echo "  Streamlit filings:       http://127.0.0.1:8502 (if enabled)"
 echo ""

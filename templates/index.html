@@ -385,6 +385,15 @@
                     <i class="bi bi-trash me-1"></i>Wipe All Data
                   </button>
                   <small class="text-secondary ms-2">Clears local DB data. You will be asked whether to keep the ETF Source Registry.</small>
+                  <div class="mt-3">
+                    <button id="backfillPricesButton" class="btn btn-outline-success btn-sm">
+                      <i class="bi bi-clock-history me-1"></i>Backfill price history
+                    </button>
+                    <small class="text-secondary ms-2">
+                      Pulls ~60 trading days of Yahoo closes for held tickers so home quant cards (vol / beta / drawdown) have a series. Safe to re-run.
+                    </small>
+                    <div id="backfillPricesStatus" class="text-secondary small mt-2"></div>
+                  </div>
                   <hr class="border-secondary my-4">
                   <div class="d-flex align-items-center justify-content-between mb-2">
                     <div>
@@ -557,6 +566,49 @@
             reportClientError('admin_wipe', 'Network or server error', err && err.message);
           }
           alert('Wipe failed. Please try again.');
+        });
+    });
+  }
+
+  const backfillBtn = document.getElementById('backfillPricesButton');
+  const backfillStatus = document.getElementById('backfillPricesStatus');
+  if (backfillBtn) {
+    backfillBtn.addEventListener('click', () => {
+      const ok = window.confirm(
+        'Backfill ~60 days of daily closes for all held tickers from Yahoo?\n\nThis may take a minute. Quant cards will use the new history after refresh.'
+      );
+      if (!ok) return;
+      backfillBtn.disabled = true;
+      if (backfillStatus) backfillStatus.textContent = 'Backfilling…';
+      fetch('/admin/backfill_prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+        .then(response => response.json().then(data => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          backfillBtn.disabled = false;
+          if (!ok || data.error) {
+            const msg = data.error || 'Unknown error';
+            if (backfillStatus) backfillStatus.textContent = 'Failed: ' + msg;
+            alert('Backfill failed: ' + msg);
+            return;
+          }
+          const msg =
+            'Upserted ' + (data.upserted || 0) + ' close row(s) across ' +
+            (data.tickers || 0) + ' ticker(s). Now have ' +
+            (data.distinct_dates || 0) + ' distinct date(s) in the last ' +
+            (data.lookback_days || 60) + ' days. Refresh the page to update quant cards.';
+          if (backfillStatus) backfillStatus.textContent = msg;
+          alert(msg);
+        })
+        .catch(err => {
+          backfillBtn.disabled = false;
+          if (typeof reportClientError === 'function') {
+            reportClientError('admin_backfill_prices', 'Network or server error', err && err.message);
+          }
+          if (backfillStatus) backfillStatus.textContent = 'Backfill failed. Please try again.';
+          alert('Backfill failed. Please try again.');
         });
     });
   }

@@ -124,7 +124,7 @@ dash.register_page(
                                                 [
                                                     html.Div("Positions", className="neon-title"),
                                                     html.Div(
-                                                        "All changes save when you leave a cell or delete a row.",
+                                                        "Manual/Umbrel rows are editable. Plaid rows (when enabled) are read-only in this grid.",
                                                         className="neon-subtitle small",
                                                     ),
                                                 ]
@@ -226,8 +226,29 @@ dash.register_page(
                                                             ),
                                                         ],
                                                         xs=12,
-                                                        md=5,
-                                                        lg=4,
+                                                        md=4,
+                                                        lg=3,
+                                                    ),
+                                                    dbc.Col(
+                                                        [
+                                                            dbc.Label(
+                                                                "Source",
+                                                                className="small mb-1 stocks-filter-label",
+                                                            ),
+                                                            dbc.Select(
+                                                                id="stocks-filter-source",
+                                                                options=[
+                                                                    {"label": "All sources", "value": "All"},
+                                                                    {"label": "Manual / Umbrel", "value": "Manual"},
+                                                                    {"label": "Plaid", "value": "Plaid"},
+                                                                ],
+                                                                value="All",
+                                                                className="stocks-filter-select",
+                                                            ),
+                                                        ],
+                                                        xs=12,
+                                                        md=3,
+                                                        lg=3,
                                                     ),
                                                     dbc.Col(
                                                         [
@@ -300,8 +321,8 @@ dash.register_page(
                                                             ),
                                                         ],
                                                         xs=12,
-                                                        md=7,
-                                                        lg=8,
+                                                        md=5,
+                                                        lg=6,
                                                     ),
                                                 ],
                                                 className="g-3",
@@ -352,6 +373,12 @@ dash.register_page(
                                                     "hideable": False,
                                                 },
                                                 {
+                                                    "name": "Source",
+                                                    "id": "source",
+                                                    "editable": False,
+                                                    "hideable": False,
+                                                },
+                                                {
                                                     "name": "Position Value",
                                                     "id": "position_value",
                                                     "type": "numeric",
@@ -387,6 +414,12 @@ dash.register_page(
                                             },
                                             style_data={"backgroundColor": "#11181f"},
                                             style_data_conditional=[
+                                                {
+                                                    "if": {
+                                                        "filter_query": '{source} eq "Plaid"',
+                                                    },
+                                                    "backgroundColor": "rgba(6, 78, 59, 0.18)",
+                                                },
                                                 {
                                                     "if": {
                                                         "filter_query": "{gain_loss} > 0",
@@ -454,159 +487,6 @@ dash.register_page(
                     className="mx-auto",
                 )
             ),
-            dbc.Row(
-                dbc.Col(
-                    dbc.Card(
-                        [
-                            dbc.CardBody(
-                                [
-                                    html.Div(
-                                        [
-                                            html.Div(
-                                                [
-                                                    html.Div("Plaid Holdings", className="neon-title"),
-                                                    html.Div(
-                                                        "Imported positions by institution",
-                                                        className="neon-subtitle",
-                                                    ),
-                                                ]
-                                            ),
-                                        ],
-                                        className="neon-card-header",
-                                    ),
-                                    dbc.Row(
-                                        [
-                                            dbc.Col(
-                                                dcc.Dropdown(
-                                                    id="institution-filter",
-                                                    options=[],
-                                                    value="All",
-                                                    placeholder="Filter by institution...",
-                                                    className="chart-dropdown",
-                                                ),
-                                                width=6,
-                                            )
-                                        ],
-                                        className="mb-3",
-                                    ),
-                                    html.Div(
-                                        DataTable(
-                                            id="plaid-holdings-table",
-                                            row_deletable=False,
-                                            row_selectable=False,
-                                            columns=[
-                                                {
-                                                    "name": "Institution",
-                                                    "id": "institution_name",
-                                                    "hideable": False,
-                                                },
-                                                {
-                                                    "name": "Account",
-                                                    "id": "account_name",
-                                                    "hideable": False,
-                                                },
-                                                {"name": "Ticker", "id": "ticker", "hideable": False},
-                                                {
-                                                    "name": "Shares",
-                                                    "id": "shares",
-                                                    "type": "numeric",
-                                                    "hideable": False,
-                                                },
-                                                {
-                                                    "name": "Cost Basis",
-                                                    "id": "cost_basis",
-                                                    "type": "numeric",
-                                                    "format": FormatTemplate.money(2),
-                                                    "hideable": False,
-                                                },
-                                                {
-                                                    "name": "Position Value",
-                                                    "id": "position_value",
-                                                    "type": "numeric",
-                                                    "format": FormatTemplate.money(2),
-                                                    "hideable": False,
-                                                },
-                                                {
-                                                    "name": "Gain/Loss",
-                                                    "id": "gain_loss",
-                                                    "type": "numeric",
-                                                    "format": FormatTemplate.money(2),
-                                                    "hideable": False,
-                                                },
-                                                {
-                                                    "name": "% Gain",
-                                                    "id": "gain_loss_pct",
-                                                    "type": "numeric",
-                                                    "format": FormatTemplate.percentage(2),
-                                                    "hideable": False,
-                                                },
-                                            ],
-                                            data=[],
-                                            style_table={"overflowX": "auto"},
-                                            style_cell={"textAlign": "center"},
-                                            style_header={
-                                                "backgroundColor": "rgba(6, 78, 59, 0.92)",
-                                                "fontWeight": "bold",
-                                                "color": "#d1fae5",
-                                                "borderBottom": "1px solid rgba(16, 185, 129, 0.35)",
-                                            },
-                                            style_data={"backgroundColor": "#11181f"},
-                                            style_data_conditional=[
-                                                {
-                                                    "if": {"filter_query": "{ticker} = 'TOTAL'"},
-                                                    "backgroundColor": "#1a242f",
-                                                    "fontWeight": "bold",
-                                                },
-                                                {
-                                                    "if": {"filter_query": "{ticker} = 'TOTAL'"},
-                                                    "pointerEvents": "none",
-                                                },
-                                                {
-                                                    "if": {
-                                                        "filter_query": "{gain_loss} > 0",
-                                                        "column_id": "gain_loss",
-                                                    },
-                                                    "color": "#22c55e",
-                                                },
-                                                {
-                                                    "if": {
-                                                        "filter_query": "{gain_loss} < 0",
-                                                        "column_id": "gain_loss",
-                                                    },
-                                                    "color": "#ef4444",
-                                                },
-                                                {
-                                                    "if": {
-                                                        "filter_query": "{gain_loss_pct} > 0",
-                                                        "column_id": "gain_loss_pct",
-                                                    },
-                                                    "color": "#22c55e",
-                                                },
-                                                {
-                                                    "if": {
-                                                        "filter_query": "{gain_loss_pct} < 0",
-                                                        "column_id": "gain_loss_pct",
-                                                    },
-                                                    "color": "#ef4444",
-                                                },
-                                            ],
-                                            filter_action="none",
-                                            sort_action="native",
-                                            page_size=10,
-                                        ),
-                                        className="privacy-sensitive-visual",
-                                    ),
-                                ]
-                            ),
-                        ],
-                        className="mb-4 neon-panel neon-green",
-                    ),
-                    xs=12,
-                    lg=10,
-                    className="mx-auto",
-                ),
-                id="manage-plaid-section",
-            ),
         ],
         fluid=True,
         className="stocks-page-shell px-3 px-md-4 py-3",
@@ -615,19 +495,63 @@ dash.register_page(
 
 
 def _parse_row_id(row):
+    """Return ``(kind, id)`` where kind is ``'m'``/``'p'`` and id is int, else ``(None, None)``."""
     rid = row.get("id")
     if rid is None or rid == "":
-        return None
+        return None, None
+    if isinstance(rid, int):
+        return "m", rid
+    s = str(rid).strip()
+    if s.startswith("m:") or s.startswith("p:"):
+        kind = s[0]
+        try:
+            return kind, int(s[2:])
+        except (TypeError, ValueError):
+            return None, None
     try:
-        return int(rid)
+        return "m", int(s)
     except (TypeError, ValueError):
+        return None, None
+
+
+def _row_key(row):
+    kind, sid = _parse_row_id(row)
+    if kind is None or sid is None:
         return None
+    return f"{kind}:{sid}"
 
 
 def _norm_cost_basis(val):
     if val is None or val == "":
         return None
     return float(val)
+
+
+def _editable_fields_changed(old, new_row):
+    nt = (new_row.get("ticker") or "").strip().upper()
+    ot = (old.get("ticker") or "").strip().upper()
+    try:
+        ns = float(new_row.get("shares"))
+    except (TypeError, ValueError):
+        ns = None
+    try:
+        os_ = float(old.get("shares"))
+    except (TypeError, ValueError):
+        os_ = None
+    ncb = _norm_cost_basis(new_row.get("cost_basis"))
+    ocb = _norm_cost_basis(old.get("cost_basis"))
+    nb = (new_row.get("brokerage") or "Manual").strip() or "Manual"
+    na = (new_row.get("account") or "Manage Stocks").strip() or "Manage Stocks"
+    ob = (old.get("brokerage") or "Manual").strip() or "Manual"
+    oa = (old.get("account") or "Manage Stocks").strip() or "Manage Stocks"
+    return nt != ot or ns != os_ or ncb != ocb or nb != ob or na != oa, {
+        "ticker": nt,
+        "shares": ns,
+        "cost_basis": ncb,
+        "brokerage": nb,
+        "account": na,
+        "old_ticker": ot,
+    }
 
 
 dash_app = dash.get_app()
@@ -644,17 +568,6 @@ def manage_sync_manual_entry_visibility(_n, _store):
     if db_manager.get_hide_manual_entry():
         return {"display": "none"}, False, False
     return {}, True, True
-
-
-@dash_app.callback(
-    Output("manage-plaid-section", "style"),
-    Input("interval-component", "n_intervals"),
-    Input("stocks-store", "data"),
-)
-def manage_sync_plaid_visibility(_n, _store):
-    if db_manager.get_hide_plaid():
-        return {"display": "none"}
-    return {}
 
 
 @dash_app.callback(
@@ -675,6 +588,8 @@ def add_draft_row(n_clicks, data):
         "ticker": "",
         "shares": None,
         "cost_basis": None,
+        "source": "Manual",
+        "is_manual": True,
         "position_value": None,
         "gain_loss": None,
         "gain_loss_pct": None,
@@ -702,26 +617,36 @@ def sync_stocks_from_table(_ts, prev, current, store_data):
 
     prev_by_id = {}
     for r in prev:
-        rid = _parse_row_id(r)
-        if rid is not None:
-            prev_by_id[rid] = r
+        key = _row_key(r)
+        if key is not None:
+            prev_by_id[key] = r
 
     curr_by_id = {}
     curr_drafts = []
     for r in current:
-        rid = _parse_row_id(r)
-        if rid is None:
+        key = _row_key(r)
+        if key is None:
             curr_drafts.append(r)
         else:
-            curr_by_id[rid] = r
+            curr_by_id[key] = r
 
-    deleted_ids = set(prev_by_id.keys()) - set(curr_by_id.keys())
-    for sid in deleted_ids:
-        db_manager.delete_stock(sid)
+    deleted_keys = set(prev_by_id.keys()) - set(curr_by_id.keys())
+    plaid_touched = False
+    deleted_manual = 0
+    for key in deleted_keys:
+        kind, sid = key.split(":", 1)
+        if kind == "p":
+            plaid_touched = True
+            continue
+        db_manager.delete_stock(int(sid))
+        deleted_manual += 1
 
     errors = []
     inserted = 0
     for dr in curr_drafts:
+        if (dr.get("source") or "Manual") == "Plaid" or dr.get("is_manual") is False:
+            plaid_touched = True
+            continue
         t = (dr.get("ticker") or "").strip().upper()
         sh = dr.get("shares")
         if not t and (sh is None or sh == ""):
@@ -757,11 +682,19 @@ def sync_stocks_from_table(_ts, prev, current, store_data):
         )
 
     updated = 0
-    for rid, new_row in curr_by_id.items():
-        if rid not in prev_by_id:
+    for key, new_row in curr_by_id.items():
+        if key not in prev_by_id:
             continue
-        old = prev_by_id[rid]
-        nt = (new_row.get("ticker") or "").strip().upper()
+        old = prev_by_id[key]
+        kind, sid = key.split(":", 1)
+        changed, fields = _editable_fields_changed(old, new_row)
+        if not changed:
+            continue
+        if kind == "p":
+            plaid_touched = True
+            continue
+        nt = fields["ticker"]
+        ns = fields["shares"]
         if not nt:
             return (
                 dash.no_update,
@@ -770,17 +703,7 @@ def sync_stocks_from_table(_ts, prev, current, store_data):
                 "danger",
                 False,
             )
-        try:
-            ns = float(new_row.get("shares"))
-            if ns < 0:
-                return (
-                    dash.no_update,
-                    "Shares cannot be negative.",
-                    True,
-                    "danger",
-                    False,
-                )
-        except (TypeError, ValueError):
+        if ns is None:
             return (
                 dash.no_update,
                 "Enter a valid number for shares.",
@@ -788,39 +711,44 @@ def sync_stocks_from_table(_ts, prev, current, store_data):
                 "danger",
                 False,
             )
-        ncb = _norm_cost_basis(new_row.get("cost_basis"))
-        nb = (new_row.get("brokerage") or "Manual").strip() or "Manual"
-        na = (new_row.get("account") or "Manage Stocks").strip() or "Manage Stocks"
-        ot = (old.get("ticker") or "").strip().upper()
-        try:
-            os_ = float(old.get("shares"))
-        except (TypeError, ValueError):
-            os_ = None
-        ocb = _norm_cost_basis(old.get("cost_basis"))
-        ob = (old.get("brokerage") or "Manual").strip() or "Manual"
-        oa = (old.get("account") or "Manage Stocks").strip() or "Manage Stocks"
-        if nt != ot or ns != os_ or ncb != ocb or nb != ob or na != oa:
-            if nt != ot:
-                ok_sym, sym_msg = finnhub_api.validate_equity_symbol(nt)
-                if not ok_sym:
-                    return (
-                        dash.no_update,
-                        sym_msg,
-                        True,
-                        "danger",
-                        False,
-                    )
-            db_manager.update_stock(
-                rid,
-                ticker=nt,
-                shares=ns,
-                cost_basis=ncb,
-                brokerage=nb,
-                account=na,
+        if ns < 0:
+            return (
+                dash.no_update,
+                "Shares cannot be negative.",
+                True,
+                "danger",
+                False,
             )
-            updated += 1
+        if nt != fields["old_ticker"]:
+            ok_sym, sym_msg = finnhub_api.validate_equity_symbol(nt)
+            if not ok_sym:
+                return (
+                    dash.no_update,
+                    sym_msg,
+                    True,
+                    "danger",
+                    False,
+                )
+        db_manager.update_stock(
+            int(sid),
+            ticker=nt,
+            shares=ns,
+            cost_basis=fields["cost_basis"],
+            brokerage=fields["brokerage"],
+            account=fields["account"],
+        )
+        updated += 1
 
-    if deleted_ids or inserted or updated:
+    if plaid_touched:
+        return (
+            (store_data or 0) + 1,
+            "Plaid positions are read-only — changes were reverted.",
+            True,
+            "warning",
+            False,
+        )
+
+    if deleted_manual or inserted or updated:
         return (store_data or 0) + 1, "", False, "success", True
     raise PreventUpdate
 
@@ -833,6 +761,9 @@ def apply_filter_to_df(df, filter_state):
     if ticker:
         mask = df["ticker"].str.contains(ticker, case=False, na=False)
         df = df[mask]
+    source = (filter_state.get("source") or "").strip()
+    if source and source != "All" and "source" in df.columns:
+        df = df[df["source"] == source]
     col = (filter_state.get("col") or "").strip()
     op = filter_state.get("op")
     val = filter_state.get("val")
@@ -851,26 +782,31 @@ def apply_filter_to_df(df, filter_state):
 @dash_app.callback(
     Output("stocks-filter-state", "data"),
     Output("stocks-filter-ticker", "value", allow_duplicate=True),
+    Output("stocks-filter-source", "value", allow_duplicate=True),
     Output("stocks-filter-num-col", "value", allow_duplicate=True),
     Output("stocks-filter-num-op", "value", allow_duplicate=True),
     Output("stocks-filter-num-val", "value", allow_duplicate=True),
     Input("stocks-filter-apply", "n_clicks"),
     Input("stocks-filter-clear", "n_clicks"),
     State("stocks-filter-ticker", "value"),
+    State("stocks-filter-source", "value"),
     State("stocks-filter-num-col", "value"),
     State("stocks-filter-num-op", "value"),
     State("stocks-filter-num-val", "value"),
     prevent_initial_call=True,
 )
-def apply_or_clear_filters(apply_n, clear_n, ticker_sub, num_col, num_op, num_val):
+def apply_or_clear_filters(apply_n, clear_n, ticker_sub, source, num_col, num_op, num_val):
     trigger = ctx.triggered_id
     if trigger == "stocks-filter-clear":
-        return {}, "", "", ">=", None
+        return {}, "", "All", "", ">=", None
     if trigger == "stocks-filter-apply":
         state = {}
         t = (ticker_sub or "").strip()
         if t:
             state["ticker"] = t
+        src = (source or "").strip()
+        if src and src != "All":
+            state["source"] = src
         col = (num_col or "").strip()
         if col and num_op in (">=", "<=") and num_val is not None and str(num_val).strip():
             try:
@@ -879,7 +815,14 @@ def apply_or_clear_filters(apply_n, clear_n, ticker_sub, num_col, num_op, num_va
                 state["val"] = float(num_val)
             except (TypeError, ValueError):
                 pass
-        return state, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        return (
+            state,
+            dash.no_update,
+            dash.no_update,
+            dash.no_update,
+            dash.no_update,
+            dash.no_update,
+        )
     raise PreventUpdate
 
 
@@ -898,13 +841,14 @@ def clear_active_cell(n_clicks):
     Output("stocks-table", "data", allow_duplicate=True),
     Input("stocks-store", "modified_timestamp"),
     Input("stocks-filter-state", "data"),
+    Input("interval-component", "n_intervals"),
     State("stocks-store", "data"),
     prevent_initial_call="initial_duplicate",
 )
-def load_stocks_table(_ts, filter_state, _store_data):
+def load_stocks_table(_ts, filter_state, _n, _store_data):
     from api import security_type as st
 
-    df = db_manager.get_stocks()
+    df = db_manager.get_manage_positions_df()
     if df.empty:
         return []
     df = st.filter_holdings_df_for_ui(df)
@@ -915,12 +859,13 @@ def load_stocks_table(_ts, filter_state, _store_data):
 @dash_app.callback(
     Output("stocks-summary-bar", "children"),
     Input("stocks-store", "modified_timestamp"),
+    Input("interval-component", "n_intervals"),
     State("stocks-store", "data"),
 )
-def update_positions_summary(_ts, _store_data):
+def update_positions_summary(_ts, _n, _store_data):
     from api import security_type as st
 
-    df = db_manager.get_stocks()
+    df = db_manager.get_manage_positions_df()
     df = st.filter_holdings_df_for_ui(df)
     if df.empty:
         return html.Span(
@@ -1014,41 +959,3 @@ def manage_auto_hide_force_update_alert(_n_intervals, is_open):
     if not is_open:
         return False, True
     return False, True
-
-
-@dash_app.callback(
-    Output("plaid-holdings-table", "data"),
-    Output("institution-filter", "options"),
-    [
-        Input("stocks-store", "modified_timestamp"),
-        Input("institution-filter", "value"),
-    ],
-)
-def load_plaid_holdings(ts, institution_value):
-    if db_manager.get_hide_plaid():
-        return [], [{"label": "All", "value": "All"}]
-    institutions = db_manager.get_institutions()
-    options = [{"label": "All", "value": "All"}] + [
-        {"label": name, "value": name} for name in institutions
-    ]
-    selected = None if institution_value in (None, "All") else institution_value
-    df = db_manager.get_plaid_holdings(selected)
-    if df.empty:
-        return [], options
-    from api import security_type as st
-
-    df = st.filter_holdings_df_for_ui(df)
-    if df.empty:
-        return [], options
-    totals = {
-        "institution_name": "All",
-        "account_name": "TOTAL",
-        "ticker": "TOTAL",
-        "shares": df["shares"].sum(),
-        "cost_basis": df["cost_basis"].sum(),
-        "position_value": df["position_value"].sum(),
-        "gain_loss": df["gain_loss"].sum(),
-    }
-    if totals["cost_basis"]:
-        totals["gain_loss_pct"] = totals["gain_loss"] / totals["cost_basis"]
-    return df.to_dict("records") + [totals], options

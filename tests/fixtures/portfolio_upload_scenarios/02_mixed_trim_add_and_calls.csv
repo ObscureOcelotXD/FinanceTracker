@@ -1,0 +1,8 @@
+Institution,Account Name,Symbol,Quantity,Market Value,Cost Basis
+Schwab,Individual,AAPL,6,920,"$600.00"
+Schwab,Individual,MSFT,8,"3,200.00",800
+Fidelity,Rollover IRA,NVDA,20,2400,2000
+Fidelity,Taxable,AAPL,3,450,450
+Schwab,Individual,AAPL 08/15/2026 200.00 C,-1,-280.00,
+Fidelity,Rollover IRA,-NVDA260828C260,-1,150.00,
+Schwab,Individual,MSFT260918C450,-2,-410.55,

@@ -77,7 +77,7 @@ def _public_app_context():
         or ""
     ).strip()
     security_email = (os.getenv("PUBLIC_SECURITY_EMAIL") or "").strip()
-    app_url = (os.getenv("PUBLIC_APP_URL") or "http://127.0.0.1:5000").strip()
+    app_url = (os.getenv("PUBLIC_APP_URL") or "http://127.0.0.1:5050").strip()
     owner_name = (
         os.getenv("PUBLIC_OWNER_NAME")
         or os.getenv("SEC_EDGAR_COMPANY")
@@ -208,6 +208,27 @@ def create_flask_app():
         try:
             db_manager.wipe_all_data(force=True, wipe_etf_sources=wipe_etf)
             return jsonify({"status": "ok", "wipe_etf_sources": wipe_etf})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route('/admin/backfill_prices', methods=['POST'])
+    def admin_backfill_prices():
+        """Force Yahoo daily-close backfill for held tickers (quant history)."""
+        data = request.get_json(silent=True) or {}
+        days = data.get("days")
+        lookback = None
+        if days is not None and str(days).strip() != "":
+            try:
+                lookback = int(days)
+            except (TypeError, ValueError):
+                return jsonify({"error": "days must be an integer"}), 400
+            if lookback < 1 or lookback > 3650:
+                return jsonify({"error": "days must be between 1 and 3650"}), 400
+        try:
+            from api import finnhub_api as fh
+
+            result = fh.backfill_held_price_history(lookback_days=lookback, force=True)
+            return jsonify({"status": "ok", **result})
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
 
@@ -613,4 +634,29 @@ def _start_news_digest_background() -> None:
 
 
 if __name__ == "__main__":
-    create_flask_app().run(host="0.0.0.0", port=5000, debug=True)
+    import socket
+
+    def _bindable(host: str, port: int) -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((host, port))
+            except OSError:
+                return False
+        return True
+
+    preferred = (os.getenv("FLASK_PORT") or os.getenv("PORT") or "").strip()
+    candidates = []
+    if preferred.isdigit():
+        candidates.append(int(preferred))
+    candidates.extend([5000, 5050, 8000, 8080, 3000, 5001, 5002])
+    host = "0.0.0.0"
+    chosen = None
+    for port in candidates:
+        if _bindable(host, port):
+            chosen = port
+            break
+    if chosen is None:
+        raise SystemExit("No free Flask port found; set FLASK_PORT.")
+    print(f"FinanceTracker debug server: http://127.0.0.1:{chosen}/")
+    create_flask_app().run(host=host, port=chosen, debug=True)

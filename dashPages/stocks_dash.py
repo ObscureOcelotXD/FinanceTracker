@@ -245,6 +245,8 @@ _price_df = db_manager.get_stock_prices_df()
 _price_df = _normalize_price_df(_price_df)
 _min_date = _price_df["date"].min() if not _price_df.empty else None
 _max_date = _price_df["date"].max() if not _price_df.empty else None
+_min_date_str = _min_date.date().isoformat() if _min_date is not None else None
+_max_date_str = _max_date.date().isoformat() if _max_date is not None else None
 _ticker_options = (
     [{"label": t, "value": t} for t in sorted(_price_df["ticker"].unique())]
     if not _price_df.empty
@@ -363,41 +365,53 @@ layout = html.Div(
                                         className="neon-card-header",
                                     ),
                                     dbc.Row(
-                                        [
-                                            dbc.Col(
-                                                [
-                                                    html.Label("Value chart type"),
-                                                    dcc.Dropdown(
-                                                        id="value-chart-type",
-                                                        options=[
-                                                            {"label": "Bar", "value": "bar"},
-                                                            {"label": "Treemap", "value": "treemap"},
-                                                        ],
-                                                        value="bar",
-                                                        clearable=False,
-                                                        className="chart-dropdown",
-                                                    ),
-                                                ],
-                                                md=6,
+                                        dbc.Col(
+                                            html.Div(
+                                                dbc.Row(
+                                                    [
+                                                        dbc.Col(
+                                                            [
+                                                                html.Label(
+                                                                    "Value chart type",
+                                                                    className="small mb-1 stocks-filter-label",
+                                                                ),
+                                                                dbc.Select(
+                                                                    id="value-chart-type",
+                                                                    options=[
+                                                                        {"label": "Bar", "value": "bar"},
+                                                                        {"label": "Treemap", "value": "treemap"},
+                                                                    ],
+                                                                    value="bar",
+                                                                    className="stocks-filter-select",
+                                                                ),
+                                                            ],
+                                                            md=6,
+                                                        ),
+                                                        dbc.Col(
+                                                            [
+                                                                html.Label(
+                                                                    "Allocation chart type",
+                                                                    className="small mb-1 stocks-filter-label",
+                                                                ),
+                                                                dbc.Select(
+                                                                    id="allocation-chart-type",
+                                                                    options=[
+                                                                        {"label": "Pie", "value": "pie"},
+                                                                        {"label": "Donut", "value": "donut"},
+                                                                    ],
+                                                                    value="pie",
+                                                                    className="stocks-filter-select",
+                                                                ),
+                                                            ],
+                                                            md=6,
+                                                        ),
+                                                    ],
+                                                    className="g-3",
+                                                ),
+                                                className="stocks-filter-panel mb-3",
                                             ),
-                                            dbc.Col(
-                                                [
-                                                    html.Label("Allocation chart type"),
-                                                    dcc.Dropdown(
-                                                        id="allocation-chart-type",
-                                                        options=[
-                                                            {"label": "Pie", "value": "pie"},
-                                                            {"label": "Donut", "value": "donut"},
-                                                        ],
-                                                        value="pie",
-                                                        clearable=False,
-                                                        className="chart-dropdown",
-                                                    ),
-                                                ],
-                                                md=6,
-                                            ),
-                                        ],
-                                        className="mb-3",
+                                            width=12,
+                                        ),
                                     ),
                                     dbc.Row(
                                         [
@@ -438,53 +452,74 @@ layout = html.Div(
                                         ],
                                         className="neon-card-header",
                                     ),
-                                    dbc.Row(
-                                        [
-                                            dbc.Col(
-                                                [
-                                                    html.Label("Tickers"),
-                                                    dcc.Dropdown(
-                                                        id="historical-tickers",
-                                                        options=_ticker_options,
-                                                        value=[o["value"] for o in _ticker_options],
-                                                        multi=True,
-                                                        className="chart-dropdown",
-                                                    ),
-                                                ],
-                                                md=6,
-                                            ),
-                                            dbc.Col(
-                                                [
-                                                    html.Label("Chart type"),
-                                                    dcc.Dropdown(
-                                                        id="historical-chart-type",
-                                                        options=[
-                                                            {"label": "Line", "value": "line"},
-                                                            {"label": "Area", "value": "area"},
-                                                        ],
-                                                        value="line",
-                                                        clearable=False,
-                                                        className="chart-dropdown",
-                                                    ),
-                                                ],
-                                                md=3,
-                                            ),
-                                            dbc.Col(
-                                                [
-                                                    html.Label("Date range"),
-                                                    dcc.DatePickerRange(
-                                                        id="stocks-date-range",
-                                                        min_date_allowed=_min_date,
-                                                        max_date_allowed=_max_date,
-                                                        start_date=_min_date,
-                                                        end_date=_max_date,
-                                                        display_format="MMM D, YYYY",
-                                                    ),
-                                                ],
-                                                md=3,
-                                            ),
-                                        ],
-                                        className="mb-3",
+                                    html.Div(
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(
+                                                    [
+                                                        html.Label("Tickers", className="small mb-1 stocks-filter-label"),
+                                                        dbc.Checklist(
+                                                            id="historical-tickers",
+                                                            options=_ticker_options,
+                                                            value=[o["value"] for o in _ticker_options],
+                                                            inline=True,
+                                                            className="display-stocks-ticker-checklist",
+                                                            input_class_name="display-stocks-ticker-check-input",
+                                                            label_class_name="display-stocks-ticker-check-label me-3",
+                                                        ),
+                                                        html.Small(
+                                                            "Toggle symbols to include in the chart.",
+                                                            className="stocks-filter-hint mt-2 d-block",
+                                                        ),
+                                                    ],
+                                                    md=5,
+                                                ),
+                                                dbc.Col(
+                                                    [
+                                                        html.Label("Chart type", className="small mb-1 stocks-filter-label"),
+                                                        dbc.Select(
+                                                            id="historical-chart-type",
+                                                            options=[
+                                                                {"label": "Line", "value": "line"},
+                                                                {"label": "Area", "value": "area"},
+                                                            ],
+                                                            value="line",
+                                                            className="stocks-filter-select",
+                                                        ),
+                                                    ],
+                                                    md=3,
+                                                ),
+                                                dbc.Col(
+                                                    [
+                                                        html.Label("Date range", className="small mb-1 stocks-filter-label"),
+                                                        html.Div(
+                                                            [
+                                                                dbc.Input(
+                                                                    id="stocks-start-date",
+                                                                    type="date",
+                                                                    value=_min_date_str,
+                                                                    min=_min_date_str,
+                                                                    max=_max_date_str,
+                                                                    className="stocks-filter-text",
+                                                                ),
+                                                                dbc.Input(
+                                                                    id="stocks-end-date",
+                                                                    type="date",
+                                                                    value=_max_date_str,
+                                                                    min=_min_date_str,
+                                                                    max=_max_date_str,
+                                                                    className="stocks-filter-text",
+                                                                ),
+                                                            ],
+                                                            className="display-stocks-date-wrap",
+                                                        ),
+                                                    ],
+                                                    md=4,
+                                                ),
+                                            ],
+                                            className="g-3 align-items-end",
+                                        ),
+                                        className="stocks-filter-panel mb-3",
                                     ),
                                     dcc.Graph(
                                         id="stocks-historical-chart",
@@ -512,8 +547,8 @@ layout = html.Div(
     Input("stocks-store-display", "data"),
     Input("historical-tickers", "value"),
     Input("historical-chart-type", "value"),
-    Input("stocks-date-range", "start_date"),
-    Input("stocks-date-range", "end_date"),
+    Input("stocks-start-date", "value"),
+    Input("stocks-end-date", "value"),
 )
 def update_historical_chart(n_intervals, store_data, tickers, chart_type, start_date, end_date):
     from api import security_type as st

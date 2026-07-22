@@ -97,6 +97,10 @@ dash.register_page(
                                                 [
                                                     html.Div("Add or Update", className="neon-title"),
                                                     html.Div("Track realized gains by year", className="neon-subtitle"),
+                                                    html.Div(
+                                                        "Uploads auto-log trims/closes (source=upload_sync). Edit proceeds if the estimate is off.",
+                                                        className="stocks-filter-hint mt-1",
+                                                    ),
                                                 ]
                                             ),
                                         ],
@@ -253,6 +257,8 @@ dash.register_page(
                                         row_selectable="single",
                                         columns=[
                                             {"name": "Ticker", "id": "ticker"},
+                                            {"name": "Brokerage", "id": "brokerage", "editable": True},
+                                            {"name": "Account", "id": "account", "editable": True},
                                             {"name": "Shares", "id": "shares", "type": "numeric", "editable": True},
                                             {"name": "Buy Date", "id": "buy_date", "editable": True},
                                             {"name": "Sell Date", "id": "sell_date", "editable": True},
@@ -292,6 +298,7 @@ dash.register_page(
                                                 "editable": False,
                                             },
                                             {"name": "Tax Year", "id": "tax_year", "editable": True},
+                                            {"name": "Source", "id": "source", "editable": False},
                                         ],
                                         data=[],
                                         style_table={"overflowX": "auto"},
@@ -503,6 +510,8 @@ def sync_realized_modify(data_ts, prev, current, store_data):
             old.get(k) != new.get(k)
             for k in [
                 "ticker",
+                "brokerage",
+                "account",
                 "shares",
                 "buy_date",
                 "sell_date",
@@ -528,6 +537,8 @@ def sync_realized_modify(data_ts, prev, current, store_data):
                 buy_date=new_row.get("buy_date"),
                 sell_date=new_row.get("sell_date"),
                 tax_year=new_row.get("tax_year"),
+                brokerage=new_row.get("brokerage"),
+                account=new_row.get("account"),
             )
     if not deleted and not edited:
         raise PreventUpdate
@@ -624,6 +635,9 @@ def load_realized_on_init(ts, year_value, store_data):
         return [], options, selected_year
     totals = {
         "ticker": "TOTAL",
+        "brokerage": "",
+        "account": "",
+        "source": "",
         "shares": df["shares"].sum(),
         "proceeds": df["proceeds"].sum(),
         "cost_basis": df["cost_basis"].sum(),

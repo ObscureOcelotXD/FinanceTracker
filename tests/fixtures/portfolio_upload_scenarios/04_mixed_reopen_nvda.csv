@@ -1,0 +1,7 @@
+broker,acct,symbol,qty,basis
+Schwab,Individual,AAPL,6,600
+Schwab,Individual,MSFT,8,800
+Fidelity,Taxable,AAPL,3,450
+Fidelity,Rollover IRA,NVDA,10,"$1,500.00"
+Schwab,Individual,-MSFT260918C450,-1,205.00
+Fidelity,Rollover IRA,NVDA 10/16/2026 130.00 C,-1,-95.40

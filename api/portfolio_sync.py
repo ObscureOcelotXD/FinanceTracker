@@ -8,14 +8,19 @@ returns 401 for :7421 API calls. Umbrel's built-in Files API on the dashboard
 from __future__ import annotations
 
 import base64
+import csv
+import io
 import json
 import os
 import posixpath
+import socket
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import requests
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import ConnectTimeout, ReadTimeout, Timeout
 
 from api import portfolio_import as pi
 
@@ -104,6 +109,35 @@ def is_configured() -> bool:
     return uses_umbrel_files() or sync_dir() is not None
 
 
+def _tcp_reachable(host: str, port: int, timeout: float = 3.0) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _umbrel_connect_hint(dash: str) -> str:
+    parsed = urlparse(dash)
+    host = parsed.hostname or dash
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return (
+        f"Cannot reach Umbrel dashboard at {dash} "
+        f"(TCP {host}:{port} timed out / refused). "
+        "Bitcoin RPC can work while the dashboard on port 80 does not. "
+        "Check: Tailscale is Connected on this Mac and the Umbrel node; "
+        "confirm UMBREL_TAILSCALE_IP is the current Tailscale IP "
+        "(or set UMBREL_DASHBOARD_URL to the URL that opens in your browser, "
+        "e.g. http://umbrel.local or https://umbrel.<tailnet>.ts.net). "
+        "Quick test: curl -m 5 http://<that-host>/"
+    )
+
+
+def _raise_umbrel_connect_error(dash: str, exc: Exception) -> None:
+    hint = _umbrel_connect_hint(dash)
+    raise ConnectionError(f"{hint} Underlying error: {exc}") from exc
+
+
 def _path_reachable(path: Path) -> bool:
     try:
         probe = path
@@ -135,13 +169,22 @@ def _umbrel_login(session: requests.Session) -> str:
             "Set UMBREL_TAILSCALE_IP and UMBREL_PASSWORD (Umbrel dashboard password)."
         )
 
+    parsed = urlparse(dash)
+    host = parsed.hostname
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    if host and not _tcp_reachable(host, port, timeout=3.0):
+        raise ConnectionError(_umbrel_connect_hint(dash))
+
     payload: dict[str, str] = {"password": password}
     totp = umbrel_totp()
     if totp:
         payload["totpToken"] = totp
 
     url = f"{dash}/trpc/user.login"
-    resp = session.post(url, json=payload, timeout=30)
+    try:
+        resp = session.post(url, json=payload, timeout=30)
+    except (ConnectTimeout, ReadTimeout, Timeout, RequestsConnectionError) as exc:
+        _raise_umbrel_connect_error(dash, exc)
     if _looks_like_html(resp):
         raise ConnectionError(f"Umbrel login returned HTML at {url}")
     if resp.status_code >= 400:
@@ -345,8 +388,37 @@ def ensure_sync_dir() -> Path:
     return root
 
 
+def _csv_summary(body: str) -> dict[str, Any]:
+    """Quick stats for push/pull confirmation messages."""
+    stock_n = 0
+    call_n = 0
+    sample: list[str] = []
+    reader = csv.DictReader(io.StringIO(body))
+    for row in reader:
+        kind = (row.get("type") or "stock").strip().lower()
+        ticker = (row.get("ticker") or "").strip().upper()
+        if kind == "call":
+            call_n += 1
+            continue
+        stock_n += 1
+        if ticker and len(sample) < 5:
+            shares = (row.get("shares") or "").strip()
+            sample.append(f"{ticker}×{shares}" if shares else ticker)
+    return {"stocks": stock_n, "calls": call_n, "sample": sample}
+
+
+def _normalize_csv_text(text: str) -> str:
+    return (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
 def push_portfolio_csv() -> dict[str, Any]:
     body = pi.export_portfolio_csv()
+    summary = _csv_summary(body)
+    sample_txt = ", ".join(summary["sample"]) if summary["sample"] else "—"
+    detail = (
+        f"{summary['stocks']} stock row(s), {summary['calls']} call row(s) "
+        f"(e.g. {sample_txt})"
+    )
     if uses_umbrel_files():
         dash = umbrel_dashboard_base_url()
         directory = remote_dir()
@@ -361,6 +433,12 @@ def push_portfolio_csv() -> dict[str, Any]:
                 raise ConnectionError(
                     "Upload appeared to succeed but remote file does not look like a portfolio CSV."
                 )
+            if _normalize_csv_text(downloaded) != _normalize_csv_text(body):
+                raise ConnectionError(
+                    "Umbrel file after upload did not match what this app just pushed. "
+                    "Refresh Umbrel Files → Home → Documents → Portfolio and confirm you are "
+                    f"looking at {target} (not an older copy / duplicate)."
+                )
         return {
             "ok": True,
             "action": "push",
@@ -368,8 +446,12 @@ def push_portfolio_csv() -> dict[str, Any]:
             "file": target,
             "bytes": len(body.encode("utf-8")),
             "message": (
-                f"Pushed portfolio CSV to Umbrel Files {target} "
-                f"(Documents → Portfolio in Umbrel Files / File Browser — refresh)."
+                f"Pushed this app's current portfolio to Umbrel ({detail}). "
+                f"Remote file: {target}. "
+                "In Umbrel open Files → Home → Documents → Portfolio → portfolio.csv "
+                "and refresh the folder. "
+                "Note: Push exports the app database — upload your Numbers/CSV in the box "
+                "above first if you edited a spreadsheet."
             ),
         }
 
@@ -382,7 +464,7 @@ def push_portfolio_csv() -> dict[str, Any]:
         "mode": "path",
         "file": str(target_path),
         "bytes": len(body.encode("utf-8")),
-        "message": f"Pushed portfolio CSV to {target_path}",
+        "message": f"Pushed portfolio CSV to {target_path} ({detail}).",
     }
 
 

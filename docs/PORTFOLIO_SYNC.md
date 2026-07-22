@@ -1,6 +1,11 @@
 # Portfolio sync (Umbrel Files over Tailscale)
 
-Push/Pull on **Import CSV** uploads or downloads `portfolio.csv` through Umbrel’s **built-in Files API** (dashboard on port 80), using your Umbrel password.
+Push/Pull on **Import CSV**:
+
+1. **Upload** your CSV into FinanceTracker (updates the local DB).  
+2. **Push to Umbrel** exports that DB to Umbrel’s `portfolio.csv`.  
+
+Push does **not** send your Numbers file straight to Umbrel — upload first, then Push.
 
 ## Where to see the file on Umbrel
 
@@ -33,9 +38,16 @@ UMBREL_PASSWORD=your_umbrel_password   # Umbrel home-screen password
 
 # If Umbrel 2FA is on:
 # UMBREL_TOTP=123456
+
+# Optional: if the Tailscale IP alone doesn't open the dashboard in a browser,
+# set the exact URL you use (LAN, MagicDNS, or HTTPS):
+# UMBREL_DASHBOARD_URL=http://umbrel.local
+# UMBREL_DASHBOARD_URL=https://umbrel.your-tailnet.ts.net
 ```
 
 Restart FinanceTracker → Import CSV → Push.
+
+**Connectivity:** Pull/Push talks to the Umbrel **dashboard on port 80** (`/trpc/user.login`), not Bitcoin RPC (`:8332`). If you see a connect timeout, Tailscale is usually disconnected or `UMBREL_TAILSCALE_IP` is stale — open the same host in a browser / `curl -m 5 http://<host>/` first.
 
 Legacy `PORTFOLIO_FB_PATH=/Documents/...` is auto-mapped to `/Home/Documents/...`.
 

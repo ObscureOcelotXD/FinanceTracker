@@ -46,8 +46,8 @@ layout = html.Div(
                                     [
                                         html.H2("Import portfolio", className="stocks-hero-title"),
                                         html.P(
-                                            "One portfolio CSV is the source of truth for holdings and covered calls. "
-                                            "Download, edit, upload — each upload replaces both datasets.",
+                                            "Edit in Numbers/Excel → export CSV → upload here to update this app. "
+                                            "Then use Push to Umbrel if you also want the remote portfolio.csv updated.",
                                             className="stocks-hero-subtitle mb-0",
                                         ),
                                     ],
@@ -67,9 +67,10 @@ layout = html.Div(
                 dbc.Alert(
                     [
                         html.Strong("Tip: "),
-                        "Wipe All Data from Home → Admin if you want a clean slate first. "
-                        "Otherwise download your current file, edit premiums/shares, then upload. "
-                        "Optional: sync to Umbrel Files (Home → Documents → Portfolio; see docs/PORTFOLIO_SYNC.md).",
+                        "Two separate steps: (1) Upload CSV updates this app’s database only. "
+                        "(2) Push to Umbrel writes that database out as portfolio.csv on Umbrel. "
+                        "Push does not upload your Numbers file directly. "
+                        "On Umbrel look in Files → Home → Documents → Portfolio (refresh the folder).",
                     ],
                     color="info",
                     className="mb-3",
@@ -157,7 +158,7 @@ layout = html.Div(
                                     [
                                         html.Div("Umbrel / Tailscale sync", className="neon-title"),
                                         html.Div(
-                                            "Writes to Umbrel Files: Home → Documents → Portfolio",
+                                            "Push = export this app’s DB → Umbrel. Pull = Umbrel → this app.",
                                             className="neon-subtitle",
                                         ),
                                     ],
@@ -266,6 +267,10 @@ def _format_auto_result(result: dict) -> tuple:
         parts.insert(0, result["message"])
     if not parts:
         return "Nothing imported.", True, "warning"
+    if color == "success":
+        parts.append(
+            "Local app updated. To update Umbrel’s portfolio.csv, click Push to Umbrel next."
+        )
     return html.Div([html.Div(p) for p in parts]), True, color
 
 

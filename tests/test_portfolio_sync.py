@@ -143,6 +143,7 @@ def test_push_umbrel_files(umbrel_env, tmp_path, monkeypatch):
 
     session.post.side_effect = _post
     session.get.side_effect = _get
+    monkeypatch.setattr(ps, "_tcp_reachable", lambda host, port, timeout=3.0: True)
     monkeypatch.setattr(ps.requests, "Session", lambda: _session_cm(session))
 
     result = ps.push_portfolio_csv()

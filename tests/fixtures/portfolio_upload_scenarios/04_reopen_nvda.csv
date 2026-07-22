@@ -1,0 +1,4 @@
+brokerage,account,ticker,shares,cost_basis
+Schwab,Individual,AAPL,6,600.00
+Schwab,Individual,MSFT,8,800.00
+Fidelity,Rollover IRA,NVDA,10,1500.00
